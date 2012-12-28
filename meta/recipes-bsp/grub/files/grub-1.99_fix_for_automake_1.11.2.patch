@@ -1,0 +1,80 @@
+Upstream-Status: Pending
+
+Fixes these errors observed with automake 1.11.2
+The useof pkglibhas become more strict compared to the earlier release of
+automake resulting in these failures.
+Fixed the files related to automake to avoid the issue.
+
+| conf/Makefile.common:140: `pkglibdir' is not a legitimate directory for `DATA'
+| grub-core/Makefile.am:5:   `conf/Makefile.common' included from here
+| conf/Makefile.common:140: `pkglibdir' is not a legitimate directory for `DATA'
+| Makefile.am:6:   `conf/Makefile.common' included from here
+| autoreconf: automake failed with exit status: 1
+| ERROR: autoreconf execution failed.
+
+
+
+| conf/Makefile.common:150: `pkglibdir' is not a legitimate directory for `SCRIPTS'
+| grub-core/Makefile.am:5:   `conf/Makefile.common' included from here
+| conf/Makefile.common:140: `pkglibdir' is not a legitimate directory for `DATA'
+| grub-core/Makefile.am:5:   `conf/Makefile.common' included from here
+| conf/Makefile.common:150: `pkglibdir' is not a legitimate directory for `SCRIPTS'
+| Makefile.am:6:   `conf/Makefile.common' included from here
+| conf/Makefile.common:140: `pkglibdir' is not a legitimate directory for `DATA'
+| Makefile.am:6:   `conf/Makefile.common' included from here
+| autoreconf: automake failed with exit status: 1
+
+Signed-Off-By: Nitin A Kamble <nitin.a.kamble@intel.com>
+2012/01/12
+
+
+Index: grub-1.99/conf/Makefile.common
+===================================================================
+--- grub-1.99.orig/conf/Makefile.common
++++ grub-1.99/conf/Makefile.common
+@@ -137,7 +137,7 @@ KERNEL_HEADER_FILES =
+ 
+ man_MANS =
+ noinst_DATA =
+-pkglib_DATA =
++pkgdata_DATA =
+ bin_SCRIPTS =
+ sbin_SCRIPTS =
+ bin_PROGRAMS =
+@@ -147,7 +147,7 @@ check_SCRIPTS =
+ grubconf_DATA =
+ check_PROGRAMS =
+ noinst_SCRIPTS =
+-pkglib_SCRIPTS =
++pkglibexec_SCRIPTS =
+ noinst_PROGRAMS =
+ grubconf_SCRIPTS =
+ noinst_LIBRARIES =
+Index: grub-1.99/Makefile.am
+===================================================================
+--- grub-1.99.orig/Makefile.am
++++ grub-1.99/Makefile.am
+@@ -101,8 +101,8 @@ CLEANFILES += widthspec.h
+ # Install config.h into platformdir
+ platform_HEADERS = config.h
+ 
+-pkglib_DATA += grub-mkconfig_lib
+-pkglib_DATA += update-grub_lib
++pkgdata_DATA += grub-mkconfig_lib
++pkgdata_DATA += update-grub_lib
+ 
+ 
+ if COND_i386_coreboot
+Index: grub-1.99/gentpl.py
+===================================================================
+--- grub-1.99.orig/gentpl.py
++++ grub-1.99/gentpl.py
+@@ -440,7 +440,7 @@ def script(platform):
+     r += "[+ ENDIF +]"
+ 
+     r += rule("[+ name +]", platform_sources(platform) + " $(top_builddir)/config.status", """
+-$(top_builddir)/config.status --file=-:$< | sed -e 's,@pkglib_DATA@,$(pkglib_DATA),g' > $@
++$(top_builddir)/config.status --file=-:$< | sed -e 's,@pkgdata_DATA@,$(pkgdata_DATA),g' > $@
+ chmod a+x [+ name +]
+ """)
+ 

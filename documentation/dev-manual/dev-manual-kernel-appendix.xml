@@ -1,0 +1,1184 @@
+<!DOCTYPE appendix PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+[<!ENTITY % poky SYSTEM "../poky.ent"> %poky; ] >
+
+<appendix id='dev-manual-kernel-appendix'>
+
+<title>Kernel Modification Example</title>
+
+    <para>
+        Kernel modification involves changing or adding configurations to an existing kernel,  
+        changing or adding recipes to the kernel that are needed to support specific hardware features, 
+        or even altering the source code itself.  
+        This appendix presents simple examples that modify the kernel source code, 
+        change the kernel configuration, and add a kernel source recipe.
+<!--        [WRITER'S NOTE:  I might want to work in information about applying a local
+            change to a kernel layer and also pushing a change upstream into the tree]
+        <orderedlist>
+            <listitem><para>Iteratively determine and set kernel configurations and make 
+                kernel recipe changes.</para></listitem>
+            <listitem><para>Apply your configuration changes to your local kernel layer.
+                </para></listitem>
+            <listitem><para>Push your configuration and recipe changes upstream into the 
+                Yocto Project source repositories to make them available to the community.
+                </para></listitem>
+        </orderedlist> -->
+    </para>
+
+    <section id='modifying-the-kernel-source-code'>
+        <title>Modifying the Kernel Source Code</title>
+
+        <para>
+            This example adds some simple QEMU emulator console output at boot time by 
+            adding <filename>printk</filename> statements to the kernel's
+            <filename>calibrate.c</filename> source code file.
+            Booting the modified image causes the added messages to appear on the emulator's
+            console.
+        </para> 
+
+        <section id='understanding-the-files-you-need'>
+            <title>Understanding the Files You Need</title>
+          
+            <para>
+                Before you modify the kernel, you need to know what Git repositories and file 
+                structures you need.
+                Briefly, you need the following: 
+                <itemizedlist>
+                    <listitem><para>A local 
+                        <link linkend='yocto-project-files'>Yocto Project Files</link>
+                        Git repository</para></listitem>
+                    <listitem><para>The 
+                        <link linkend='poky-extras-repo'><filename>poky-extras</filename></link>
+                        Git repository placed within the local Yocto Project files Git 
+                        repository</para></listitem>  
+                    <listitem><para>A bare clone of the 
+                        <link linkend='local-kernel-files'>Linux Yocto Kernel</link> upstream Git 
+                        repository to which you want to push your modifications.
+                        </para></listitem>
+                    <listitem><para>A copy of that bare clone in which you make your source 
+                        modifcations</para></listitem>
+                </itemizedlist>
+            </para>
+
+            <para> 
+                The following figure summarizes these four areas.  
+                Within each rectangular that represents a data structure, a  
+                host development directory pathname appears at the 
+                lower left-hand corner of the box.  
+                These pathnames are the locations used in this example.
+                The figure also provides key statements and commands used during the kernel
+                modification process:
+            </para>
+
+            <para>
+                <imagedata fileref="figures/kernel-example-repos-denzil.png" width="7in" depth="5in" 
+                    align="center" scale="100" />
+            </para>
+
+            <para>
+                Here is a brief description of the four areas:
+                <itemizedlist>
+                    <listitem><para><emphasis>Local Yocto Project Files Git Repository:</emphasis> 
+                        This area contains all the metadata that supports building images in the 
+                        Yocto Project build environment - the local Yocto Project files.
+                        In this example, the local Yocto Project files Git repository also 
+                        contains the build directory, which contains the configuration directory 
+                        that lets you control the build.
+                        In this example, the repository also contains the 
+                        <filename>poky-extras</filename> Git repository.</para>
+                        <para>See the bulleted item
+                        "<link linkend='local-yp-release'>Yocto Project Release</link>"
+                        for information on how to get these files.</para></listitem>
+                    <listitem><para><emphasis><filename>poky-extras</filename> Git Repository:</emphasis> 
+                        This area contains the <filename>meta-kernel-dev</filename> layer, 
+                        which is where you make changes that append the kernel build recipes.
+                        You edit <filename>.bbappend</filename> files to locate your 
+                        local kernel source files and to identify the kernel being built.
+                        This Git repository is a gathering place for extensions to the Linux Yocto 
+                        (or really any) kernel recipes that faciliate the creation and development
+                        of kernel features, BSPs or configurations.</para>
+                        <para>See the bulleted item
+                        "<link linkend='poky-extras-repo'>The 
+                        <filename>poky-extras</filename> Git Repository</link>" 
+                        for information on how to get these files.</para></listitem>                
+                    <listitem><para><emphasis>Bare Clone of the Linux Yocto kernel:</emphasis> 
+                        This bare Git repository tracks the upstream Git repository of the Linux 
+                        Yocto kernel source code you are changing.
+                        When you modify the kernel you must work through a bare clone.
+                        All source code changes you make to the kernel must be committed and 
+                        pushed to the bare clone using Git commands.
+                        As mentioned, the <filename>.bbappend</filename> file in the 
+                        <filename>poky-extras</filename> repository points to the bare clone
+                        so that the build process can locate the locally changed source files.</para>
+                        <para>See the bulleted item
+                        "<link linkend='local-kernel-files'>Linux Yocto Kernel</link>"
+                        for information on how to set up the bare clone.
+                        </para></listitem>
+                    <listitem><para><emphasis>Copy of the Linux Yocto Kernel Bare Clone:</emphasis>
+                        This Git repository contains the actual source files that you modify.  
+                        Any changes you make to files in this location need to ultimately be pushed
+                        to the bare clone using the <filename>git push</filename> command.</para>
+                        <para>See the bulleted item
+                        "<link linkend='local-kernel-files'>Linux Yocto Kernel</link>"
+                        for information on how to set up the bare clone.
+                        <note>Typically, Git workflows follow a scheme where changes made to a local area 
+                        are pulled into a Git repository.
+                        However, because the <filename>git pull</filename> command does not work 
+                        with bare clones, this workflow pushes changes to the 
+                        repository even though you could use other more complicated methods to
+                        get changes into the bare clone.</note>
+                        </para></listitem>
+                </itemizedlist>
+            </para>
+        </section>
+
+        <section id='setting-up-the-local-yocto-project-files-git-repository'>
+            <title>Setting Up the Local Yocto Project Files Git Repository</title>
+
+            <para>
+                You can get the local Yocto Project files through tarball extraction or by 
+                cloning the <filename>poky</filename> Git repository.  
+                This example uses <filename>poky</filename> as the root directory of the 
+                local Yocto Project files Git repository.
+                See the bulleted item
+                "<link linkend='local-yp-release'>Yocto Project Release</link>"
+                for information on how to get these files.
+            </para>
+
+            <para>
+                Once you have the repository set up, 
+                you have many development branches from which you can work. 
+                From inside the repository you can see the branch names and the tag names used 
+                in the Git repository using either of the following two commands:
+                <literallayout class='monospaced'>
+     $ cd poky
+     $ git branch -a
+     $ git tag -l
+                </literallayout> 
+                This example uses the Yocto Project &DISTRO; Release code named "&DISTRO_NAME;", 
+                which maps to the <filename>&DISTRO_NAME;</filename> branch in the repository. 
+                The following commands create and checkout the local <filename>&DISTRO_NAME;</filename>
+                branch:
+                <literallayout class='monospaced'>
+     $ git checkout -b &DISTRO_NAME; origin/&DISTRO_NAME;
+     Branch &DISTRO_NAME; set up to track remote branch &DISTRO_NAME; from origin.
+     Switched to a new branch '&DISTRO_NAME;'
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='setting-up-the-poky-extras-git-repository'>
+            <title>Setting Up the poky-extras Git Repository</title>
+
+            <para>
+                This example places the <filename>poky-extras</filename> Git repository inside
+                of <filename>poky</filename>.
+                See the bulleted item
+                "<link linkend='poky-extras-repo'>The 
+                <filename>poky-extras</filename> Git Repository</link>" 
+                for information on how to get the <filename>poky-extras</filename> repository.
+            </para>
+
+            <para>
+                Because this example uses the Yocto Project &DISTRO; Release code 
+                named "&DISTRO_NAME;", which maps to the <filename>&DISTRO_NAME;</filename> 
+                branch in the repository, you need to be sure you are using that 
+                branch for <filename>poky-extra</filename>.
+                The following commands create and checkout the local 
+                branch you are using for the <filename>&DISTRO_NAME;</filename>
+                branch:
+                <literallayout class='monospaced'>
+     $ git checkout -b &DISTRO_NAME; origin/&DISTRO_NAME;
+     Branch &DISTRO_NAME; set up to track remote branch &DISTRO_NAME; from origin.
+     Switched to a new branch '&DISTRO_NAME;'
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='setting-up-the-bare-clone-and-its-copy'>
+            <title>Setting Up the Bare Clone and its Copy</title>
+
+            <para>
+                This example modifies the <filename>linux-yocto-3.2</filename> kernel.
+                Thus, you need to create a bare clone of that kernel and then make a copy of the 
+                bare clone.
+                See the bulleted item
+                "<link linkend='local-kernel-files'>Linux Yocto Kernel</link>" 
+                for information on how to do that.
+            </para>
+
+            <para>
+                The bare clone exists for the kernel build tools and simply as the receiving end 
+                of <filename>git push</filename>
+                commands after you make edits and commits inside the copy of the clone.
+                The copy (<filename>my-linux-yocto-3.2-work</filename> in this example) has to have 
+                a local branch created and checked out for your work.
+                This example uses <filename>common-pc-base</filename> as the local branch.
+                The following commands create and checkout the branch:
+                <literallayout class='monospaced'>
+     $ cd ~/my-linux-yocto-3.2-work
+     $ git checkout -b common-pc-base origin/standard/default/common-pc/base
+     Checking out files: 100% (532/532), done.
+     Branch common-pc-base set up to track remote branch 
+        standard/default/common-pc/base from origin.
+     Switched to a new branch 'common-pc-base'
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='building-and-booting-the-default-qemu-kernel-image'>
+            <title>Building and Booting the Default QEMU Kernel Image</title>
+
+            <para>
+                Before we make changes to the kernel source files, this example first builds the 
+                default image and then boots it inside the QEMU emulator.
+                <note>
+                    Because a full build can take hours, you should check two variables in the 
+                    <filename>build</filename> directory that is created after you source the 
+                    <filename>oe-init-build-env</filename> script.
+                    You can find these variables
+                    <filename>BB_NUMBER_THREADS</filename> and <filename>PARALLEL_MAKE</filename>
+                    in the <filename>build/conf</filename> directory in the 
+                    <filename>local.conf</filename> configuration file.
+                    By default, these variables are commented out.
+                    If your host development system supports multi-core and multi-thread capabilities,
+                    you can uncomment these statements and set the variables to significantly shorten
+                    the full build time.
+                    As a guideline, set both <filename>BB_NUMBER_THREADS</filename> and 
+                    <filename>PARALLEL_MAKE</filename> to twice the number 
+                    of cores your machine supports.
+                </note>
+                The following two commands <filename>source</filename> the build environment setup script
+                and build the default <filename>qemux86</filename> image.
+                If necessary, the script creates the build directory:
+                <literallayout class='monospaced'>
+     $ cd ~/poky
+     $ source oe-init-build-env
+
+          ### Shell environment set up for builds. ###
+
+     You can now run 'bitbake &lt;target&gt;'
+
+     Common targets are:
+         core-image-minimal
+         core-image-sato
+         meta-toolchain
+         meta-toolchain-sdk
+         adt-installer
+         meta-ide-support
+
+     You can also run generated qemu images with a command like 'runqemu qemux86'
+                </literallayout>
+            </para>
+
+            <para>
+                The following <filename>bitbake</filename> command starts the build:
+                <literallayout class='monospaced'>
+     $ bitbake -k core-image-minimal
+                </literallayout>
+                <note>Be sure to check the settings in the <filename>local.conf</filename>
+                before starting the build.</note>
+            </para>
+
+            <para>  
+                After the build completes, you can start the QEMU emulator using the resulting image
+                <filename>qemux86</filename> as follows:
+                <literallayout class='monospaced'>
+     $ runqemu qemux86
+                </literallayout>
+            </para>
+
+            <para>
+                As the image boots in the emulator, console message and status output appears
+                across the terminal window.
+                Because the output scrolls by quickly, it is difficult to read.
+                To examine the output, you log into the system using the 
+                login <filename>root</filename> with no password.
+                Once you are logged in, issue the following command to scroll through the 
+                console output:
+                <literallayout class='monospaced'>
+     # dmesg | less
+                </literallayout>
+            </para>
+
+            <para>
+                Take note of the output as you will want to look for your inserted print command output
+                later in the example.
+            </para>
+        </section>
+
+        <section id='changing-the-source-code-and-pushing-it-to-the-bare-clone'>
+            <title>Changing the Source Code and Pushing it to the Bare Clone</title>
+
+            <para>
+                The file you change in this example is named <filename>calibrate.c</filename>
+                and is located in the <filename>my-linux-yocto-3.2-work</filename> Git repository
+                (the copy of the bare clone) in <filename>init</filename>.
+                This example simply inserts several <filename>printk</filename> statements
+                at the beginning of the <filename>calibrate_delay</filename> function.
+            </para>
+
+            <para>
+                Here is the unaltered code at the start of this function:
+                <literallayout class='monospaced'>
+     void __cpuinit calibrate_delay(void)
+     {
+     	unsigned long lpj;
+     	static bool printed;
+     	int this_cpu = smp_processor_id();
+
+     	if (per_cpu(cpu_loops_per_jiffy, this_cpu)) {
+               .
+               .
+               .
+               </literallayout>
+           </para>
+
+           <para>
+               Here is the altered code showing five new <filename>printk</filename> statements 
+               near the top of the function:
+                <literallayout class='monospaced'>
+     void __cpuinit calibrate_delay(void)
+     {
+         unsigned long lpj;
+         static bool printed;
+         int this_cpu = smp_processor_id();
+
+         printk("*************************************\n");
+         printk("*                                   *\n");
+         printk("*        HELLO YOCTO KERNEL         *\n");
+         printk("*                                   *\n");
+         printk("*************************************\n");
+
+     	if (per_cpu(cpu_loops_per_jiffy, this_cpu)) {
+               .
+               .
+               .
+               </literallayout>
+           </para>
+
+           <para>
+               After making and saving your changes, you need to stage them for the push.
+               The following Git commands are one method of staging and committing your changes:
+               <literallayout class='monospaced'>
+     $ git add calibrate.c
+     $ git commit --signoff
+               </literallayout>
+           </para>
+
+           <para>
+               Once the source code has been modified, you need to use Git to push the changes to 
+               the bare clone.  
+               If you do not push the changes, then the Yocto Project build system will not pick 
+               up the changed source files.
+           </para>
+
+           <para>
+               The following command pushes the changes to the bare clone:
+               <literallayout class='monospaced'>
+     $ git push origin common-pc-base:standard/default/common-pc/base
+               </literallayout>
+           </para>
+       </section>
+
+       <section id='changing-build-parameters-for-your-build'>
+           <title>Changing Build Parameters for Your Build</title>
+
+           <para>
+               At this point, the source has been changed and pushed.
+               The example now defines some variables used by the Yocto Project build system 
+               to locate your kernel source.
+               You essentially need to identify where to find the kernel recipe and the changed source code.
+               You also need to be sure some basic configurations are in place that identify the 
+               type of machine you are building and to help speed up the build should your host support
+               multiple-core and thread capabilities.
+           </para>
+
+           <para>
+               Do the following to make sure the build parameters are set up for the example.
+               Once you set up these build parameters, they do not have to change unless you 
+               change the target architecture of the machine you are building or you move
+               the bare clone, copy of the clone, or the <filename>poky-extras</filename> repository:
+               <itemizedlist>
+                   <listitem><para><emphasis>Build for the Correct Target Architecture:</emphasis> The 
+                       <filename>local.conf</filename> file in the build directory defines the build's 
+                       target architecture.
+                       By default, <filename>MACHINE</filename> is set to 
+                       <filename>qemux86</filename>, which specifies a 32-bit 
+                       <trademark class='registered'>Intel</trademark> Architecture 
+                       target machine suitable for the QEMU emulator.  
+                       In this example, <filename>MACHINE</filename> is correctly configured.
+                       </para></listitem>
+                   <listitem><para><emphasis>Optimize Build Time:</emphasis> Also in the 
+                       <filename>local.conf</filename> file are two variables that can speed your 
+                       build time if your host supports multi-core and multi-thread capabilities:
+                       <filename>BB_NUMBER_THREADS</filename> and <filename>PARALLEL_MAKE</filename>.
+                       If the host system has multiple cores then you can optimize build time 
+                       by setting both these variables to twice the number of 
+                       cores.</para></listitem>
+                   <listitem><para><emphasis>Identify Your <filename>meta-kernel-dev</filename>
+                       Layer:</emphasis> The <filename>BBLAYERS</filename> variable in the 
+                       <filename>bblayers.conf</filename> file found in the 
+                       <filename>poky/build/conf</filename> directory needs to have the path to your local
+                       <filename>meta-kernel-dev</filename> layer.  
+                       By default, the <filename>BBLAYERS</filename> variable contains paths to  
+                       <filename>meta</filename> and <filename>meta-yocto</filename> in the 
+                       <filename>poky</filename> Git repository.
+                       Add the path to your <filename>meta-kernel-dev</filename> location.
+                       Be sure to substitute your user information in the statement.
+                       Here is an example:
+                       <literallayout class='monospaced'>
+     BBLAYERS = " \
+       /home/scottrif/poky/meta \
+       /home/scottrif/poky/meta-yocto \
+       /home/scottrif/poky/poky-extras/meta-kernel-dev \
+       "
+                       </literallayout></para></listitem>
+                   <listitem><para><emphasis>Identify Your Source Files:</emphasis> In the 
+                       <filename>linux-yocto_3.2.bbappend</filename> file located in the 
+                       <filename>poky-extras/meta-kernel-dev/recipes-kernel/linux</filename>
+                       directory, you need to identify the location of the 
+                       local source code, which in this example is the bare clone named
+                       <filename>linux-yocto-3.2.git</filename>.
+                       To do this, set the <filename>KSRC_linux_yocto</filename> variable to point to your
+                       local <filename>linux-yocto-3.2.git</filename> Git repository by adding the 
+                       following statement.
+                       Be sure to substitute your user information in the statement:
+                       <literallayout class='monospaced'>
+     KSRC_linux_yocto_3_2 ?= "/home/scottrif/linux-yocto-3.2.git"
+                       </literallayout></para></listitem>
+<!--                   <listitem><para><emphasis>Specify the Kernel Machine:</emphasis> Also in the 
+                       <filename>linux-yocto_3.2.bbappend</filename> file, you need to specify
+                       the kernel machine with the following statement:
+                       <literallayout class='monospaced'>
+     KMACHINE_qemux86 = "standard/default/common-pc/base"
+                       </literallayout></para></listitem> -->
+               </itemizedlist>
+           </para>
+
+           <note>
+               Before attempting to build the modified kernel, there is one more set of changes you 
+               need to make in the <filename>meta-kernel-dev</filename> layer.
+               Because all the kernel <filename>.bbappend</filename> files are parsed during the 
+               build process regardless of whether you are using them or not, you should either 
+               comment out the <filename>COMPATIBLE_MACHINE</filename> statements in all 
+               unused <filename>.bbappend</filename> files.
+               Alternatively, you can simply remove all the files 
+               except the one your are using for the build 
+               (i.e. <filename>linux-yocto_3.2.bbappend</filename> in this example).
+           </note>            
+       </section>
+
+        <section id='building-and-booting-the-modified-qemu-kernel-image'>
+            <title>Building and Booting the Modified QEMU Kernel Image</title>
+
+            <para>
+                Next, you need to build the modified image.
+                Do the following:
+                <orderedlist>
+                    <listitem><para>Your environment should be set up since you previously sourced
+                        the <filename>oe-init-build-env</filename> script.
+                        If it isn't, source the script again from <filename>poky</filename>.
+                        <literallayout class='monospaced'>
+     $ cd ~/poky
+     $ source oe-init-build-env
+                        </literallayout>
+                        </para></listitem>
+                    <listitem><para>Be sure old images are cleaned out by running the 
+                        <filename>cleanall</filename> BitBake task as follows from your build directory:
+                        <literallayout class='monospaced'>
+     $ bitbake -c cleanall linux-yocto
+                        </literallayout></para>
+                        <para><note>Never remove any files by hand from the <filename>tmp/deploy</filename>
+                        directory insided the local Yocto Project files build directory.
+                        Always use the BitBake <filename>cleanall</filename> task to clear
+                        out previous builds.</note></para></listitem>
+                    <listitem><para>Next, build the kernel image using this command:
+                        <literallayout class='monospaced'>
+     $ bitbake -k core-image-minimal
+                        </literallayout></para></listitem>
+                    <listitem><para>Finally, boot the modified image in the QEMU emulator 
+                        using this command:
+                        <literallayout class='monospaced'>
+     $ runqemu qemux86
+                        </literallayout></para></listitem>
+                </orderedlist>
+            </para>
+
+            <para>
+                Log into the machine using <filename>root</filename> with no password and then 
+                use the following shell command to scroll through the console's boot output.
+                <literallayout class='monospaced'>
+     # dmesg | less
+                </literallayout>
+            </para>
+
+            <para>
+                You should see the results of your <filename>printk</filename> statements 
+                as part of the output.
+            </para>
+        </section>
+    </section>
+
+    <section id='changing-the-kernel-configuration'>
+        <title>Changing the Kernel Configuration</title>
+
+        <para>
+            This example changes the default behavior, which is "on", of the Symmetric 
+            Multi-processing Support (<filename>CONFIG_SMP</filename>) to "off".  
+            It is a simple example that demonstrates how to reconfigure the kernel.
+        </para>
+
+        <section id='getting-set-up-to-run-this-example'>
+            <title>Getting Set Up to Run this Example</title>
+
+            <para>
+                If you took the time to work through the example that modifies the kernel source code 
+                in "<link linkend='modifying-the-kernel-source-code'>Modifying the Kernel Source
+                Code</link>" you should already have the Yocto Project files set up on your 
+                host machine.
+                If this is the case, go to the next section, which is titled
+                "<link linkend='examining-the-default-config-smp-behavior'>Examining the Default
+                <filename>CONFIG_SMP</filename> Behavior</link>", and continue with the 
+                example.
+            </para>
+
+            <para>
+                If you don't have the Yocto Project files established on your system, 
+                you can get them through tarball extraction or by 
+                cloning the <filename>poky</filename> Git repository.  
+                This example uses <filename>poky</filename> as the root directory of the 
+                local <link linkend='yocto-project-files'>Yocto Project Files</link> Git repository.
+                See the bulleted item
+                "<link linkend='local-yp-release'>Yocto Project Release</link>"
+                for information on how to get these files.
+            </para>
+
+            <para>
+                Once you have the repository set up, 
+                you have many development branches from which you can work. 
+                From inside the repository you can see the branch names and the tag names used 
+                in the Git repository using either of the following two commands:
+                <literallayout class='monospaced'>
+     $ cd poky
+     $ git branch -a
+     $ git tag -l
+                </literallayout> 
+                This example uses the Yocto Project &DISTRO; Release code named "&DISTRO_NAME;", 
+                which maps to the <filename>&DISTRO_NAME;</filename> branch in the repository. 
+                The following commands create and checkout the local <filename>&DISTRO_NAME;</filename>
+                branch:
+                <literallayout class='monospaced'>
+     $ git checkout -b &DISTRO_NAME; origin/&DISTRO_NAME;
+     Branch &DISTRO_NAME; set up to track remote branch &DISTRO_NAME; from origin.
+     Switched to a new branch '&DISTRO_NAME;'
+                </literallayout>
+            </para>
+
+            <para>
+                Next, you need to build the default <filename>qemux86</filename> image that you 
+                can boot using QEMU.
+                <note>
+                    Because a full build can take hours, you should check two variables in the 
+                    <filename>build</filename> directory that is created after you source the 
+                    <filename>oe-init-build-env</filename> script.
+                    You can find these variables
+                    <filename>BB_NUMBER_THREADS</filename> and <filename>PARALLEL_MAKE</filename>
+                    in the <filename>build/conf</filename> directory in the 
+                    <filename>local.conf</filename> configuration file.
+                    By default, these variables are commented out.
+                    If your host development system supports multi-core and multi-thread capabilities,
+                    you can uncomment these statements and set the variables to significantly shorten
+                    the full build time.
+                    As a guideline, set <filename>BB_NUMBER_THREADS</filename> to twice the number 
+                    of cores your machine supports and set <filename>PARALLEL_MAKE</filename> to one and 
+                    a half times the number of cores your machine supports.
+                </note>
+                The following two commands <filename>source</filename> the build environment setup script
+                and build the default <filename>qemux86</filename> image.
+                If necessary, the script creates the build directory:
+                <literallayout class='monospaced'>
+     $ cd ~/poky
+     $ source oe-init-build-env
+
+          ### Shell environment set up for builds. ###
+
+     You can now run 'bitbake &lt;target&gt;'
+
+     Common targets are:
+         core-image-minimal
+         core-image-sato
+         meta-toolchain
+         meta-toolchain-sdk
+         adt-installer
+         meta-ide-support
+
+     You can also run generated qemu images with a command like 'runqemu qemux86'
+                </literallayout>
+            </para>
+
+            <para>
+                The following <filename>bitbake</filename> command starts the build:
+                <literallayout class='monospaced'>
+     $ bitbake -k core-image-minimal
+                </literallayout>
+                <note>Be sure to check the settings in the <filename>local.conf</filename>
+                before starting the build.</note>
+            </para>
+        </section>
+
+        <section id='examining-the-default-config-smp-behavior'>
+            <title>Examining the Default&nbsp;&nbsp;<filename>CONFIG_SMP</filename> Behavior</title>
+
+            <para>
+                By default, <filename>CONFIG_SMP</filename> supports multiple processor machines.
+                To see this default setting from within the QEMU emulator, boot your image using 
+                the emulator as follows:
+                <literallayout class='monospaced'>
+     $ runqemu qemux86 qemuparams="-smp 4"
+                </literallayout>
+            </para>
+
+            <para>
+                Login to the machine using <filename>root</filename> with no password.
+                After logging in, enter the following command to see how many processors are 
+                being supported in the emulator.
+                The emulator reports support for the number of processors you specified using 
+                the <filename>-smp</filename> option, four in this case:
+                <literallayout class='monospaced'>
+     # cat /proc/cpuinfo | grep processor 
+     processor       : 0
+     processor       : 1
+     processor       : 2
+     processor       : 3
+     #
+                </literallayout>
+                To check the setting for <filename>CONFIG_SMP</filename>, you can use the 
+                following command:
+                <literallayout class='monospaced'>
+     zcat /proc/config.gz | grep CONFIG_SMP
+                </literallayout>
+                The console returns the following showing that multi-processor machine support
+                is set:
+                <literallayout class='monospaced'>
+     CONFIG_SMP=y
+                </literallayout>
+                Logout of the emulator using the <filename>exit</filename> command and 
+                then close it down.
+            </para>
+        </section>
+
+        <section id='changing-the-config-smp-configuration-using-menuconfig'>
+            <title>Changing the&nbsp;&nbsp;<filename>CONFIG_SMP</filename> Configuration Using&nbsp;&nbsp;<filename>menuconfig</filename></title>
+
+            <para>
+                The <filename>menuconfig</filename> tool provides an interactive method with which
+                to set kernel configurations.
+                You need to run <filename>menuconfig</filename> inside the Yocto BitBake environment.
+                Thus, the environment must be set up using the <filename>oe-init-build-env</filename>
+                script found in the Yocto Project files Git repository build directory.
+                If you have not sourced this script do so with the following commands:
+                <literallayout class='monospaced'>
+     $ cd ~/poky
+     $ source oe-init-build-env
+                </literallayout>
+            </para>
+
+            <para>
+                After setting up the environment to run <filename>menuconfig</filename>, you are ready 
+                to use the tool to interactively change the kernel configuration.
+                In this example, we are basing our changes on the <filename>linux-yocto-3.2</filename>
+                kernel.
+                The Yocto Project build environment recognizes this kernel as 
+                <filename>linux-yocto</filename>.
+                Thus, the following commands from the shell in which you previously sourced the 
+                environment initialization script cleans the shared state memory and the 
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-WORKDIR'><filename>WORKDIR</filename></ulink>
+                directory and then builds and launches <filename>menuconfig</filename>:
+                <literallayout class='monospaced'>
+     $ bitbake linux-yocto -c cleansstate
+     $ bitbake linux-yocto -c menuconfig
+                </literallayout>
+                <note>
+                    Due to a bug in the release, it is necessary to clean the shared state memory
+                    in order for configurations made using <filename>menuconfig</filename> to take
+                    effect.
+                    For information on the bug, see
+                    <ulink url='https://bugzilla.yoctoproject.org/show_bug.cgi?id=2256'></ulink>
+                </note>
+            </para>
+                  
+            <para>
+                Once <filename>menuconfig</filename> launches, navigate through the user interface
+                to find the <filename>CONFIG_SMP</filename> configuration setting.
+                You can find it at <filename>Processor Type and Features</filename>.
+                The configuration selection is 
+                <filename>Symmetric Multi-processing Support</filename>.
+                After using the arrow keys to highlight this selection, press "n" to turn it off.
+                Then, exit out and save your selections.
+            </para>
+
+            <para>
+                Once you save the selection, the <filename>.config</filename> configuration file
+                is updated. 
+                This is the file that the build system uses to configure the Linux Yocto kernel
+                when it is built. 
+                You can find and examine this file in the Yocto Project Files Git repository in 
+                the build directory. 
+                This example uses the following:
+                <literallayout class='monospaced'>
+     ~/poky/build/tmp/work/qemux86-poky-linux/linux-yocto-3.2.11+git1+84f...
+        ...656ed30-r1/linux-qemux86-standard-build
+                </literallayout>
+                <note>
+                    The previous example directory is artificially split and many of the characters 
+                    in the actual filename are omitted in order to make it more readable.
+                    Also, depending on the kernel you are using, the exact pathname might differ 
+                    slightly.
+                </note>
+            </para>
+
+            <para>
+                Within the <filename>.config</filename> file, you can see the following setting:
+                <literallayout class='monospaced'>
+     # CONFIG_SMP is not set
+                </literallayout>
+            </para>
+
+            <para>
+                A good method to isolate changed configurations is to use a combination of the 
+                <filename>menuconfig</filename> tool and simple shell commands.
+                Before changing configurations with <filename>menuconfig</filename>, copy the 
+                existing <filename>.config</filename> and rename it to something else,
+                use <filename>menuconfig</filename> to make 
+                as many changes an you want and save them, then compare the renamed configuration 
+                file against the newly created file.
+                You can use the resulting differences as your base to create configuration fragments
+                to permanently save in your kernel layer.
+                <note>
+                    Be sure to make a copy of the <filename>.config</filename> and don't just
+                    rename it. 
+                    The Yocto Project build system needs an existing <filename>.config</filename>
+                    from which to work.
+                </note>
+            </para>
+        </section>
+
+        <section id='recompiling-the-kernel-and-testing-the-new-configuration'>
+            <title>Recompiling the Kernel and Testing the New Configuration</title>
+
+            <para>
+                At this point, you are ready to recompile your kernel image with 
+                the new setting in effect using the BitBake commands below:
+                <literallayout class='monospaced'>
+     $ bitbake linux-yocto -c compile -f
+     $ bitbake linux-yocto
+                </literallayout>
+            </para>
+
+            <note>
+                Manually turning off a kernel configuration setting such as 
+                <filename>CONFIG_SMP</filename> can cause the kernel configuration audit
+                to issue warnings during the build. 
+                In this example, warnings appear telling you that the expected value
+                <filename>CONFIG_SMP</filename> does not appear in the <filename>.config</filename>
+                file.
+                Because in this example you specifically turned off <filename>CONFIG_SMP</filename>,
+                you can safely ignore the apparent conflict.
+            </note>
+ 
+            <para>
+                Now run the QEMU emulator and pass it the same multi-processor option as before:
+                <literallayout class='monospaced'>
+     $ runqemu qemux86 qemuparams="-smp 4"
+                </literallayout>
+            </para>
+
+            <para>
+                Login to the machine using <filename>root</filename> with no password
+                and test for the number of processors the kernel supports:
+                <literallayout class='monospaced'>
+     # cat /proc/cpuinfo | grep processor 
+     processor       : 0
+     #
+                </literallayout>
+            </para>
+
+            <para>
+                From the output, you can see that the kernel no longer supports multi-processor systems.
+                The output indicates support for a single processor.  You can verify the 
+                <filename>CONFIG_SMP</filename> setting by using this command:
+                <literallayout class='monospaced'>
+     zcat /proc/config.gz | grep CONFIG_SMP
+                </literallayout>
+                The console returns the following output:
+                <literallayout class='monospaced'>
+     # CONFIG_SMP is not set
+                </literallayout>
+                You have successfully reconfigured the kernel.
+            </para>
+        </section>
+    </section>
+
+    <section id='adding-kernel-recipes'>
+        <title>Adding Kernel Recipes</title>
+
+        <para>
+            A future release of this manual will present an example that adds kernel recipes, which provide 
+            new functionality to the kernel.
+        </para>
+
+        <para>
+            <imagedata fileref="figures/wip.png" 
+                width="2in" depth="3in" align="center" scalefit="1" />
+        </para> 
+    </section> 
+
+
+
+<!--        <section id='is-vfat-supported'>
+            <title>Is VFAT Supported?</title>
+            
+            <para>
+                <literallayout class='monospaced'>
+I entered runqemu qemux86 and it fires upthis fires up the emulator and uses the
+image and filesystem in the build area created in the previous section.
+
+Then I copied over a pre-created and formated 5.2MB VFAT file named vfat.img.
+I did this with scp vfat.img root@192.168.7.2:
+The file is in the root directory.
+I had to do this because the mkfs.vfat vfat.img command does not work.
+mkfs is not recognized in the qemu terminal session.
+
+when I try mount -o loop -t vfat vfat.img mnt/ I get the error
+mount: can't set up loop device: No space left on device.
+This error is because the loop module is not currently in the kernel image.
+However, this module is available in the 
+build area in the tarball modules-2.6.37.6-yocto-starndard+-20-qemux86.tgz.
+You can add this to the kernel image by adding the 
+IMAGE_INSTALL += " kernel-module-loop" statement at the top of the local.conf
+file in the build area and then rebuilding the kernel using bitbake.
+It should just build whatever is necessary and not go through an entire build again.
+
+
+
+
+                The <filename>menuconfig</filename> tool provides an interactive method with which
+                to set kernel configurations.
+                In order to use <filename>menuconfig</filename> from within the BitBake environment
+                you need to source an environment setup script.
+                This script is located in the local Yocto Project file structure and is called
+                <filename>oe-init-build-env</filename>.
+            </para>
+
+            <para>
+                The following command sets up the environment:
+                <literallayout class='monospaced'>
+     $ cd ~/poky
+     $ source oe-init-build-env
+     $ runqemu qemux86
+     Continuing with the following parameters:
+     KERNEL: [/home/scottrif/poky/build/tmp/deploy/images/bzImage-qemux86.bin]
+     ROOTFS: [/home/scottrif/poky/build/tmp/deploy/images/core-image-sato-qemux86.ext3]
+     FSTYPE: [ext3]
+     Setting up tap interface under sudo
+     Acquiring lockfile for tap0...
+     WARNING: distccd not present, no distcc support loaded.
+     Running qemu...
+     /home/scottrif/poky/build/tmp/sysroots/x86_64-linux/usr/bin/qemu 
+        -kernel /home/scottrif/poky/build/tmp/deploy/images/bzImage-qemux86.bin 
+        -net nic,vlan=0 -net tap,vlan=0,ifname=tap0,script=no,downscript=no 
+        -hda /home/scottrif/poky/build/tmp/deploy/images/core-image-sato-qemux86.ext3 
+        -show-cursor -usb -usbdevice wacom-tablet -vga vmware -enable-gl -no-reboot 
+        -m 128 &dash;&dash;append "vga=0 root=/dev/hda rw mem=128M ip=192.168.7.2::192.168.7.1:255.255.255.0 oprofile.timer=1 "
+     Enabling opengl
+     vmsvga_value_write: guest runs Linux.
+                </literallayout>
+            </para>
+        </section> 
+
+        <section id='prepare-to-use-menuconfig'>
+            <title>Prepare to use <filename>menuconfig</filename></title>
+            
+
+            <para>
+                [WRITER'S NOTE: Stuff from here down are crib notes]
+            </para>
+
+            <para>
+                Once menuconfig fires up you see all kinds of categories that you can interactively
+                investigate.
+                If they have an "M" in it then the feature is "modularized".
+                I guess that means that means that it needs to be manually linked in when the 
+                kernel is booted??? (Not sure).
+                If they have an "*" then the feature is automatically part of the kernel.]
+            </para>
+
+            <para>
+                So the tmp/work/ area was created in poky and there is a .config file in there and
+                a .config.old file.  
+                The old one must have been created when I exited from menuconfig after poking around 
+                a bit.
+                Nope - appears to just be created automatically.
+            </para>
+
+            <para>
+                A good practice is to first determine what configurations you have for the kernel.
+                You can see the results by looking in the .config file in the build/tmp/work/qemux86-poky-linux area
+                of the local YP files. 
+                There is a directory named linux-yocto-2.6.37* in the directory.
+                In that directory is a directory named linux-qemux86-standard-build.
+                In that directory you will find a file named .config that is the configuration file
+                for the kernel that will be used when you build the kernel.
+                You can open that file up and examine it. 
+                If you do a search for "VFAT" you will see that that particular configuration is not 
+                enabled for the kernel.
+                This means that you cannot print a VFAT text file, or for that matter, even mount one
+                from the image if you were to build it at this point.
+            </para>
+
+            <para>
+                You can prove the point by actually trying it at this point.
+                Here are the commands:
+                <literallayout class='monospaced'>
+     $ mkdir ~/vfat-test
+     $ cd ~/vfat-test
+     $ dd if=/dev/zero of=vfat.img bs=1024 count=5000  [creates a 5MB disk image]
+     5+0 records in
+     5+0 records out
+     5242880 bytes (5.2 MB) copied, 0.00798912 s, 656 MB/s
+     $ ls -lah   [lists the contents of the new image. l=long, a=all, h=human readable]
+     total 5.1M
+     drwxr-xr-x  2 srifenbark scottrif 4.0K 2011-08-01 08:18 .
+     drwxr-xr-x 66 srifenbark scottrif 4.0K 2011-08-01 08:14 ..
+     -rw-r&dash;&dash;r&dash;&dash;  1 srifenbark scottrif 5.0M 2011-08-01 08:18 vfat.img
+     $ mkfs.vfat vfat.img                      [formats the disk image]
+     mkfs.vfat 3.0.7 (24 Dec 2009)
+     $ mkdir mnt                               [mounts the disk image]
+     $ sudo su                                 [gives you root privilege]
+     # mount -o loop vfat.img mnt              [mounts it as a loop device]
+     # ls mnt                                  [shows nothing in mnt]
+     # mount                                   [lists the mounted filesystems - note/dev/loop0]
+     /dev/sda1 on / type ext4 (rw,errors=remount-ro)
+     proc on /proc type proc (rw,noexec,nosuid,nodev)
+     none on /sys type sysfs (rw,noexec,nosuid,nodev)
+     none on /sys/fs/fuse/connections type fusectl (rw)
+     none on /sys/kernel/debug type debugfs (rw)
+     none on /sys/kernel/security type securityfs (rw)
+     none on /dev type devtmpfs (rw,mode=0755)
+     none on /dev/pts type devpts (rw,noexec,nosuid,gid=5,mode=0620)
+     none on /dev/shm type tmpfs (rw,nosuid,nodev)
+     none on /var/run type tmpfs (rw,nosuid,mode=0755)
+     none on /var/lock type tmpfs (rw,noexec,nosuid,nodev)
+     none on /lib/init/rw type tmpfs (rw,nosuid,mode=0755)
+     binfmt_misc on /proc/sys/fs/binfmt_misc type binfmt_misc (rw,noexec,nosuid,nodev)
+     gvfs-fuse-daemon on /home/scottrif/.gvfs type fuse.gvfs-fuse-daemon (rw,nosuid,nodev,user=srifenbark)
+     /dev/loop0 on /home/scottrif/vfat-test/mnt type vfat (rw)
+     # echo "hello world" > mnt/hello.txt    [creates a text file in the mounted VFAT system]
+     # ls mnt                                [verifies the file is there]
+     hello.txt
+     # cat mnt/hello.txt                     [displays the contents of the file created]
+     hello world 
+     # umount mnt                            [unmounts the system and destroys the loop]
+     # exit                                  [gets out of privileged user mode]
+     exit
+
+     $ lsmod                                 [this stuff Darren did to show me ]
+     Module                  Size  Used by   [the status of modules in the regular linux kernel]
+     nls_iso8859_1           4633  0 
+     nls_cp437               6351  0 
+     vfat                   10866  0 
+     fat                    55350  1 vfat
+     snd_hda_codec_atihdmi     3023  1 
+     binfmt_misc             7960  1 
+     snd_hda_codec_realtek   279008  1 
+     ppdev                   6375  0 
+     snd_hda_intel          25805  2 
+     fbcon                  39270  71 
+     tileblit                2487  1 fbcon
+     font                    8053  1 fbcon
+     bitblit                 5811  1 fbcon
+     snd_hda_codec          85759  3 snd_hda_codec_atihdmi,snd_hda_codec_realtek,snd_hda_intel
+     softcursor              1565  1 bitblit
+     snd_seq_dummy           1782  0 
+     snd_hwdep               6924  1 snd_hda_codec
+     vga16fb                12757  0 
+     snd_pcm_oss            41394  0 
+     snd_mixer_oss          16299  1 snd_pcm_oss
+     snd_pcm                87946  3 snd_hda_intel,snd_hda_codec,snd_pcm_oss
+     vgastate                9857  1 vga16fb
+     snd_seq_oss            31191  0 
+     snd_seq_midi            5829  0 
+     snd_rawmidi            23420  1 snd_seq_midi
+     radeon                744506  3 
+     snd_seq_midi_event      7267  2 snd_seq_oss,snd_seq_midi
+     ttm                    61007  1 radeon
+     snd_seq                57481  6 snd_seq_dummy,snd_seq_oss,snd_seq_midi,snd_seq_midi_event
+     drm_kms_helper         30742  1 radeon
+     snd_timer              23649  2 snd_pcm,snd_seq
+     snd_seq_device          6888  5 snd_seq_dummy,snd_seq_oss,snd_seq_midi,snd_rawmidi,snd_seq
+     usb_storage            50377  0 
+     snd                    71283  16 \
+                                      snd_hda_codec_realtek,snd_hda_intel,snd_hda_codec, \
+                                      snd_hwdep,snd_pcm_oss,snd_mixer_oss,snd_pcm, \
+                                      snd_seq_oss,snd_rawmidi,snd_seq,snd_timer,snd_seq_device
+     soundcore               8052  1 snd
+     psmouse                65040  0 
+     drm                   198886  5 radeon,ttm,drm_kms_helper
+     i2c_algo_bit            6024  1 radeon
+     serio_raw               4918  0 
+     snd_page_alloc          8500  2 snd_hda_intel,snd_pcm
+     dell_wmi                2177  0 
+     dcdbas                  6886  0 
+     lp                      9336  0 
+     parport                37160  2 ppdev,lp
+     usbhid                 41116  0 
+     ohci1394               30260  0 
+     hid                    83888  1 usbhid
+     ieee1394               94771  1 ohci1394
+     tg3                   122382  0
+                </literallayout>
+            </para>
+        </section>
+    </section> -->
+</appendix>
+
+<!--
+
+
+EXTRA STUFF I MIGHT NEED BUT NOW SURE RIGHT NOW.
+
+In the standard layer structure you have several areas that you need to examine or 
+                    modify.
+                    For this example the layer contains four areas:
+                    <itemizedlist>
+                        <listitem><para><emphasis><filename>conf</filename></emphasis> - Contains the 
+                        <filename>layer.conf</filename> that identifies the location of the recipe files. 
+                        </para></listitem>
+                        <listitem><para><emphasis><filename>images</filename></emphasis> - Contains the 
+                        image recipe file. 
+                        This recipe includes the base image you will be using and specifies other 
+                        packages the image might need.</para></listitem>
+                        <listitem><para><emphasis><filename>recipes-bsp</filename></emphasis> - Contains 
+                        recipes specific to the hardware for which you are developing the kernel.
+                        </para></listitem>
+                        <listitem><para><emphasis><filename>recipes-kernel</filename></emphasis> - Contains the 
+                        "append" files that add information to the main recipe kernel.  
+                        </para></listitem>
+                    </itemizedlist>
+                </para>
+
+                <para>
+                    Let's take a look at the <filename>layer.conf</filename> in the 
+                    <filename>conf</filename> directory first.
+                    This configuration file enables the Yocto Project build system to locate and 
+                    use the information in your new layer.
+                </para>
+
+                <para>
+                    The variable <filename>BBPATH</filename> needs to include the path to your layer
+                    as follows:
+                    <literallayout class='monospaced'>
+     BBPATH := "${BBPATH}:${LAYERDIR}"
+                    </literallayout>
+                    And, the variable <filename>BBFILES</filename> needs to be modified to include your 
+                    recipe and append files:
+                    <literallayout class='monospaced'>
+     BBFILES := "${BBFILES} ${LAYERDIR}/images/*.bb \ 
+        ${LAYERDIR}/images/*.bbappend \
+        ${LAYERDIR}/recipes-*/*/*.bb \
+        ${LAYERDIR}/recipes-*/*/*.bbappend"
+                    </literallayout>
+                    Finally, you need to be sure to use your layer name in these variables at the 
+                    end of the file:
+                    <literallayout class='monospaced'>
+     BBFILE_COLLECTIONS += "elc"
+     BBFILE_PATTERN_elc := "^${LAYERDIR}/"
+     BBFILE_PRIORITY_elc = "9"
+                   </literallayout>
+                </para>
+
+                <para>
+                    The <filename>images</filename> directory contains an append file that helps 
+                    further define the image.
+                    In our example, the base image is <filename>core-image-minimal</filename>.  
+                    The image does, however, need some additional modules that we are using
+                    for this example.
+                    These modules support the amixer functionality.
+                    Here is the append file:
+                    <literallayout class='monospaced'>
+     require recipes-core/images/poky-image-minimal.bb
+
+     IMAGE_INSTALL += "dropbear alsa-utils-aplay alsa-utils-alsamixer"
+     IMAGE_INSTALL_append_qemux86 += " kernel-module-snd-ens1370 \
+        kernel-module-snd-rawmidi kernel-module-loop kernel-module-nls-cp437 \
+        kernel-module-nls-iso8859-1 qemux86-audio alsa-utils-amixer"
+
+     LICENSE = "MIT"
+                   </literallayout>
+               </para>
+
+               <para>
+                   While the focus of this example is not on the BSP, it is worth mentioning that the
+                   <filename>recipes-bsp</filename> directory has the recipes and append files for 
+                   features that the hardware requires. 
+                   In this example, there is a script and a recipe to support the 
+                   <filename>amixer</filename> functionality in QEMU.
+                   It is beyond the scope of this manual to go too deeply into the script.
+                   Suffice it to say that the script tests for the presence of the mixer, sets up 
+                   default mixer values, enables the mixer, unmutes master and then 
+                   sets the volume to 100.
+               </para>
+
+               <para>
+                   The recipe <filename>qemu86-audio.bb</filename> installs and runs the 
+                   <filename>amixer</filename> when the system boots.
+                   Here is the recipe:
+                   <literallayout class='monospaced'>
+     SUMMARY = "Provide a basic init script to enable audio"
+     DESCRIPTION = "Set the volume and unmute the Front mixer setting during boot."
+     SECTION = "base"
+     LICENSE = "MIT"
+     LIC_FILES_CHKSUM = "file://${POKYBASE}/LICENSE;md5=3f40d7994397109285ec7b81fdeb3b58"
+
+     PR = "r4"
+
+     inherit update-rc.d
+
+     RDEPENDS = "alsa-utils-amixer"
+
+     SRC_URI = "file://qemux86-audio"
+
+     INITSCRIPT_NAME = "qemux86-audio"
+     INITSCRIPT_PARAMS = "defaults 90"
+
+     do_install() {
+	     install -d ${D}${sysconfdir} \
+     	           ${D}${sysconfdir}/init.d
+     	install -m 0755 ${WORKDIR}/qemux86-audio ${D}${sysconfdir}/init.d
+             cat ${WORKDIR}/${INITSCRIPT_NAME} | \
+                 sed -e 's,/etc,${sysconfdir},g' \
+                     -e 's,/usr/sbin,${sbindir},g' \
+                     -e 's,/var,${localstatedir},g' \
+                     -e 's,/usr/bin,${bindir},g' \
+                     -e 's,/usr,${prefix},g' > ${D}${sysconfdir}/init.d/${INITSCRIPT_NAME}
+             chmod 755 ${D}${sysconfdir}/init.d/${INITSCRIPT_NAME}
+     }
+                </literallayout>
+                </para>
+
+                <para>
+                    The last area to look at is <filename>recipes-kernel</filename>.
+                    This area holds configuration fragments and kernel append files.
+                    The append file must have the same name as the kernel recipe, which is 
+                    <filename>linux-yocto-2.6.37</filename> in this example.
+                    The file can <filename>SRC_URI</filename> statements to point to configuration 
+                    fragments you might have in the layer. 
+                    The file can also contain <filename>KERNEL_FEATURES</filename> statements that specify
+                    included kernel configurations that ship with the Yocto Project.
+                </para>
+-->
+
+<!--
+vim: expandtab tw=80 ts=4
+-->

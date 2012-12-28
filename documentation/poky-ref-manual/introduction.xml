@@ -1,0 +1,139 @@
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+[<!ENTITY % poky SYSTEM "../poky.ent"> %poky; ] >
+
+<chapter id='intro'>
+<title>Introduction</title>
+
+<section id='intro-welcome'>
+    <title>Introduction</title>
+
+    <para>
+        This manual provides reference information for the current release of the Yocto Project.
+        The Yocto Project is an open-source collaboration project focused on embedded Linux
+        developers.
+        Amongst other things, the Yocto Project uses the Poky build tool to 
+        construct complete Linux images.
+        You can find complete introductory and getting started information on the Yocto Project
+        by reading the 
+        <ulink url='&YOCTO_DOCS_QS_URL;'>   
+        Yocto Project Quick Start</ulink>.
+        For task-based information using the Yocto Project, see 
+        <ulink url='&YOCTO_DOCS_DEV_URL;'>
+        The Yocto Project Development Manual</ulink>.
+        You can also find lots of information on the Yocto Project on the 
+        <ulink url="&YOCTO_HOME_URL;">Yocto Project website</ulink>.
+    </para>
+</section>
+
+<section id='intro-manualoverview'>
+    <title>Documentation Overview</title>
+    <para>
+        This reference manual consists of the following:
+        <itemizedlist>
+            <listitem><para><emphasis>
+                <link linkend='usingpoky'>Using the Yocto Project</link>:</emphasis> This chapter
+                provides an overview of the components that make up the Yocto Project 
+                followed by information about debugging images created in the Yocto Project.
+                </para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='technical-details'>Technical Details</link>:</emphasis> 
+                This chapter describes fundamental Yocto Project components as well as an explanation
+                behind how the Yocto Project uses shared state (sstate) cache to speed build time.
+                </para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='bsp'>Board Support Packages (BSP) - Developer's Guide</link>:</emphasis> 
+                This chapter describes the example filesystem layout for BSP development and 
+                the click-through licensing scheme.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='platdev'>Platform Development With the Yocto Project</link>:</emphasis> 
+                This chapter describes application development, debugging, and profiling using 
+                the Yocto Project.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-structure'>Reference: Directory Structure</link>:</emphasis> 
+                This appendix describes the directory structure of the Yocto Project files.
+                The Yocto Project files represent the file structure or Git repository created 
+                as a result of setting up the Yocto Project on your host development system.
+                </para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-bitbake'>Reference: BitBake</link>:</emphasis> 
+                This appendix provides an overview of the BitBake tool and its role within 
+                the Yocto Project.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-classes'>Reference: Classes</link>:</emphasis> 
+                This appendix describes the classes used in the Yocto Project.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-images'>Reference: Images</link>:</emphasis> 
+                This appendix describes the standard images that the Yocto Project supports.
+                </para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-features'>Reference: Features</link>:</emphasis> 
+                This appendix describes mechanisms for creating distribution, machine, and image 
+                features during the build process using the Yocto Project.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-variables-glos'>Reference: Variables Glossary</link>:</emphasis> 
+                This appendix presents most Yocto Project variables.
+                Entries describe the function of the variable and how to apply them.
+                </para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='ref-varlocality'>Reference: Variable Context</link>:</emphasis> 
+                This appendix provides variable locality or context.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='faq'>Reference: FAQ</link>:</emphasis> 
+                This appendix provides answers for commonly asked questions in the Yocto Project
+                development environment.</para></listitem>
+            <listitem><para><emphasis>
+                <link linkend='resources'>Reference: Contributing to the Yocto Project</link>:</emphasis> 
+                This appendix provides guidance on how you can contribute back to the Yocto 
+                Project.</para></listitem>
+        </itemizedlist>
+    </para>
+</section>
+
+
+<section id='intro-requirements'>
+<title>System Requirements</title>
+    <para>
+        For Yocto Project system requirements, see the
+        <ulink url='&YOCTO_DOCS_QS_URL;#resources'>
+        What You Need and How You Get It</ulink> section in the Yocto Project Quick Start.
+    </para>
+</section>
+
+<section id='intro-getit'>
+    <title>Obtaining the Yocto Project</title>
+    <para>
+        The Yocto Project development team makes the Yocto Project available through a number 
+        of methods:
+        <itemizedlist>
+            <listitem><para><emphasis>Releases:</emphasis> Stable, tested releases are available through 
+                <ulink url='&YOCTO_DL_URL;/releases/yocto/'/>.</para></listitem>
+            <listitem><para><emphasis>Nightly Builds:</emphasis> These releases are available at
+                <ulink url='http://autobuilder.yoctoproject.org/nightly'/>.  
+                These builds include Yocto Project releases, meta-toolchain tarballs, and 
+                experimental builds.</para></listitem>
+            <listitem><para><emphasis>Yocto Project Website:</emphasis> You can find releases
+                of the Yocto Project and supported BSPs at the
+                <ulink url='&YOCTO_HOME_URL;'>Yocto Project website</ulink>.
+                Along with these downloads, you can find lots of other information at this site.  
+                </para></listitem>
+        </itemizedlist>
+    </para>
+</section>
+
+<section id='intro-getit-dev'>
+    <title>Development Checkouts</title>
+    <para>
+        Development using the Yocto Project requires a local copy of the Yocto Project files. 
+        You can get these files by downloading a Yocto Project release tarball and unpacking it,  
+        or by establishing a Git repository of the files.
+        For information on both these methods, see the
+        "<ulink url='&YOCTO_DOCS_DEV_URL;#getting-setup'>Getting Setup</ulink>" 
+        section in The Yocto Project Development Manual.
+    </para>
+</section>
+
+</chapter>
+<!--
+vim: expandtab tw=80 ts=4
+-->

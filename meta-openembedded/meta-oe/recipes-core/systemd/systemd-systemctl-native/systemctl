@@ -1,0 +1,86 @@
+#!/bin/sh
+
+ROOT=
+
+# parse command line params
+action=
+while [ $# != 0 ]; do
+	opt="$1"
+
+	case "$opt" in
+		enable)
+			shift
+
+			action="$opt"
+			services="$1"
+			cmd_args="1"
+			shift
+			;;
+		disable)
+			shift
+
+			action="$opt"
+			services="$1"
+			cmd_args="1"
+			shift
+			;;
+		--root=*)
+			ROOT=${opt##--root=}
+			cmd_args="0"
+			shift
+			;;
+		*)
+			if [ "$cmd_args" = "1" ]; then
+				services="$services $opt" 
+				shift
+			else
+				echo "'$opt' is an unkown option; exiting with error"
+				exit 1
+			fi
+			;;
+	esac
+done
+
+for service in $services; do
+	# find service file
+	for p in $ROOT/etc/systemd/system \
+		 $ROOT/lib/systemd/system \
+		 $ROOT/usr/lib/systemd/system; do
+		if [ -e $p/$service ]; then
+			service_file=$p/$service
+			service_file=${service_file##$ROOT}
+		fi
+	done
+	if [ -z "$service_file" ]; then
+		echo "'$service' couldn't be found; exiting with error"
+		exit 1
+	fi
+
+	# create the required symbolic links
+	wanted_by=$(grep WantedBy $ROOT/$service_file \
+		        | sed 's,WantedBy=,,g' \
+		        | tr ',' '\n' \
+		        | grep '\.target$')
+
+	for r in $wanted_by; do
+		if [ "$action" = "enable" ]; then
+			mkdir -p $ROOT/etc/systemd/system/$r.wants
+			ln -s $service_file $ROOT/etc/systemd/system/$r.wants
+			echo "Enabled $service for $wanted_by."
+		else
+			rm -f $ROOT/etc/systemd/system/$r.wants/$service_file
+			rmdirs -p $ROOT/etc/systemd/system/$r.wants
+			echo "Disabled $service for $wanted_by."
+		fi
+	done
+
+	# call us for the other required scripts
+	also=$(grep Also $ROOT/$service_file \
+		   | sed 's,Also=,,g' \
+		   | tr ',' '\n')
+	for a in $also; do
+		if [ "$action" = "enable" ]; then
+			$0 --root=$ROOT enable $a
+		fi
+	done
+done

@@ -1,0 +1,2052 @@
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+[<!ENTITY % poky SYSTEM "../poky.ent"> %poky; ] >
+
+<chapter id='extendpoky'>
+
+<title>Common Tasks</title>
+    <para>
+        This chapter describes standard tasks such as adding new
+        software packages, extending or customizing images or porting the Yocto Project to
+        new hardware (adding a new machine). 
+        The chapter also describes ways to modify package source code, combine multiple 
+        versions of library files into a single image, and handle a package name alias.
+        Finally, the chapter contains advice about how to make changes to the 
+        Yocto Project to achieve the best results.
+    </para>
+
+    <section id="understanding-and-creating-layers">
+        <title>Understanding and Creating Layers</title>
+
+        <para>
+            The Yocto Project build system supports organizing <link linkend='metadata'>metadata</link> 
+            into multiple layers. 
+            Layers allow you to isolate different types of customizations from each other.
+            You might find it tempting to keep everything in one layer when working on a single project.
+            However, the more modular you organize your metadata, the easier it is to cope with future changes.
+        </para>
+
+        <para>
+            To illustrate how layers are used to keep things modular, consider machine customizations.
+            These types of customizations typically reside in a BSP Layer.
+            Furthermore, the machine customizations should be isolated from recipes and metadata that support 
+            a new GUI environment, for example. 
+            This situation gives you a couple a layers: one for the machine configurations, and one for the 
+            GUI environment.
+            It is important to understand, however, that the BSP layer can still make machine-specific 
+            additions to recipes within the GUI environment layer without polluting the GUI layer itself 
+            with those machine-specific changes. 
+            You can accomplish this through a recipe that is a BitBake append 
+            (<filename>.bbappend</filename>) file, which is described later in this section.
+        </para>
+
+        <para>
+        </para>
+
+        <section id='yocto-project-layers'>
+            <title>Yocto Project Layers</title>
+
+            <para>
+                The Yocto Project contains several layers right out of the box.
+                You can easily identify a layer in the Yocto Project by the name of its folder.
+                Folders that are layers begin with the string <filename>meta</filename>.
+                For example, when you set up the <link linkend='yocto-project-files'>Yocto Project Files</link>
+                structure, you will see several layers: <filename>meta</filename>, <filename>meta-demoapps</filename>,
+                <filename>meta-skeleton</filename>, and <filename>meta-yocto</filename>.
+                Each of these folders is a layer.
+            </para>
+
+            <para>
+                Furthermore, if you set up a local copy of the <filename>meta-intel</filename> Git repository
+                and then explore that folder, you will discover many BSP layers within the 
+                <filename>meta-intel</filename> layer.
+                For more information on BSP layers, see the 
+                "<ulink url='&YOCTO_DOCS_BSP_URL;#bsp-layers'>BSP Layers</ulink>"
+                section in the Yocto Project Board Support Package (BSP) Developer's Guide.
+            </para>
+        </section>
+
+        <section id='creating-your-own-layer'>
+            <title>Creating Your Own Layer</title>
+
+            <para>
+                It is very easy to create your own layer to use with the Yocto Project.
+                Follow these general steps to create your layer:
+                <orderedlist>
+                    <listitem><para><emphasis>Check Existing Layers:</emphasis> Before creating a new layer, 
+                        you should be sure someone has not already created a layer containing the metadata 
+                        you need.
+                        You can see the
+                        <ulink url='&OE_HOME_URL;/wiki/LayerIndex'><filename>LayerIndex</filename></ulink>
+                        for a list of layers from the OpenEmbedded community that can be used in the 
+                        Yocto Project.</para></listitem>
+                    <listitem><para><emphasis>Create a Directory:</emphasis> Create the directory 
+                        for your layer.
+                        Traditionally, prepend the name of the folder with the string
+                        <filename>meta</filename>.
+                        For example:
+                        <literallayout class='monospaced'>
+     meta-mylayer
+     meta-GUI_xyz
+     meta-mymachine
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Create a Layer Configuration File:</emphasis> Inside your new
+                       layer folder, you need to create a <filename>conf/layer.conf</filename> file.
+                       It is easiest to take an existing layer configuration file and copy that to your 
+                       layer's <filename>conf</filename> directory and then modify the file as needed.</para>
+                       <para>The <filename>meta-yocto/conf/layer.conf</filename> file demonstrates the 
+                       required syntax:
+                       <literallayout class='monospaced'>
+     # We have a conf and classes directory, add to BBPATH
+     BBPATH := "${LAYERDIR}:${BBPATH}"
+
+     # We have a packages directory, add to BBFILES
+     BBFILES := "${BBFILES} ${LAYERDIR}/recipes-*/*/*.bb \
+                 ${LAYERDIR}/recipes-*/*/*.bbappend"
+
+     BBFILE_COLLECTIONS += "yocto"
+     BBFILE_PATTERN_yocto := "^${LAYERDIR}/"
+     BBFILE_PRIORITY_yocto = "5" 
+                        </literallayout></para>
+                        <para>In the previous example, the recipes for the layers are added to 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-BBFILES'>BBFILES</ulink></filename>. 
+                        The 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-BBFILE_COLLECTIONS'>BBFILE_COLLECTIONS</ulink></filename>
+                        variable is then appended with the layer name. 
+                        The 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-BBFILE_PATTERN'>BBFILE_PATTERN</ulink></filename> 
+                        variable is set to a regular expression and is used to match files
+                        from <filename>BBFILES</filename> into a particular layer.
+                        In this case, immediate expansion of 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-LAYERDIR'>LAYERDIR</ulink></filename> 
+                        sets <filename>BBFILE_PATTERN</filename> to the layer's path.
+                        The 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-BBFILE_PRIORITY'>BBFILE_PRIORITY</ulink></filename> 
+                        variable then assigns a priority to the layer. 
+                        Applying priorities is useful in situations where the same package might appear in multiple
+                        layers and allows you to choose what layer should take precedence.</para>
+                        <para>Note the use of the 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-LAYERDIR'>LAYERDIR</ulink></filename> 
+                        variable with the immediate expansion operator.
+                        The <filename>LAYERDIR</filename> variable expands to the directory of the current layer and
+                        requires the immediate expansion operator so that BitBake does not wait to expand the variable 
+                        when it's parsing a different directory.</para>
+                        <para>Through the use of the <filename>BBPATH</filename> variable,
+                        BitBake locates <filename>.bbclass</filename> files, configuration
+                        files, and files that are included with <filename>include</filename> 
+                        and <filename>require</filename> statements. 
+                        For these cases, BitBake uses the first file with the matching name found in 
+                        <filename>BBPATH</filename>.
+                        This is similar to the way the <filename>PATH</filename> variable is used for binaries. 
+                        We recommend, therefore, that you use unique <filename>.bbclass</filename>
+                        and configuration file names in your custom layer.</para></listitem>
+                    <listitem><para><emphasis>Add Content:</emphasis> Depending on the type of layer, 
+                        add the content.
+                        If the layer adds support for a machine, add the machine configuration in 
+                        a <filename>conf/machine/</filename> file within the layer.
+                        If the layer adds distro policy, add the distro configuration in a
+                        <filename>conf/distro/</filename> file with the layer.
+                        If the layer introduces new recipes, put the recipes you need in 
+                        <filename>recipes-*</filename> subdirectories within the layer.</para></listitem>
+                </orderedlist>
+            </para>
+
+            <para>
+                To create layers that are easier to maintain, you should consider the following:
+                <itemizedlist>
+                    <listitem><para>Avoid "overlaying" entire recipes from other layers in your 
+                        configuration.
+                        In other words, don't copy an entire recipe into your layer and then modify it.
+                        Use <filename>.bbappend</filename> files to override the parts of the 
+                        recipe you need to modify.</para></listitem>
+                    <listitem><para>Avoid duplicating include files.
+                        Use <filename>.bbappend</filename> files for each recipe that uses an include 
+                        file.
+                        Or, if you are introducing a new recipe that requires the included file, use the 
+                        path relative to the original layer directory to refer to the file.
+                        For example, use <filename>require recipes-core/somepackage/somefile.inc</filename>
+                        instead of <filename>require somefile.inc</filename>. 
+                        If you're finding you have to overlay the include file, it could indicate a 
+                        deficiency in the include file in the layer to which it originally belongs.
+                        If this is the case, you need to address that deficiency instead of overlaying
+                        the include file.
+                        For example, consider how Qt 4 database support plugins are configured.
+                        The Yocto Project does not have MySQL or PostgreSQL, however OpenEmbedded's
+                        layer <filename>meta-oe</filename> does.
+                        Consequently, <filename>meta-oe</filename> uses <filename>.bbappend</filename>
+                        files to modify the <filename>QT_SQL_DRIVER_FLAGS</filename> variable to enable 
+                        the appropriate plugins. 
+                        This variable was added to the <filename>qt4.inc</filename> include file in 
+                        The Yocto Project specifically to allow the <filename>meta-oe</filename> layer
+                        to be able to control which plugins are built.</para></listitem>
+                </itemizedlist> 
+            </para>
+
+            <para>
+                We also recommend the following:
+                <itemizedlist>
+                    <listitem><para>Store custom layers in a Git repository that uses the 
+                        <filename>meta-&lt;layer_name&gt;</filename> format.</para></listitem>
+                    <listitem><para>Clone the repository alongside other <filename>meta</filename>
+                        directories in  
+                        <link linkend='yocto-project-files'>Yocto Project Files</link>.</para></listitem>
+                 </itemizedlist>
+                 Following these recommendations keeps your Yocto Project files area and 
+                 its configuration entirely inside the Yocto Project's core base.
+            </para>
+        </section>
+
+        <section id='enabling-your-layer'>
+            <title>Enabling Your Layer</title>
+
+            <para>
+                Before the Yocto Project build system can use your new layer, you need to enable it.
+                To enable your layer, simply add your layer's path to the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-BBLAYERS'>BBLAYERS</ulink></filename> 
+                variable in your <filename>conf/bblayers.conf</filename> file, which is found in the 
+                <link linkend='yocto-project-build-directory'>Yocto Project Build Directory</link>. 
+                The following example shows how to enable a layer named <filename>meta-mylayer</filename>:
+                <literallayout class='monospaced'>
+     LCONF_VERSION = "1"
+
+     BBFILES ?= ""
+     BBLAYERS = " \
+       /path/to/poky/meta \
+       /path/to/poky/meta-yocto \
+       /path/to/poky/meta-mylayer \
+       "
+                </literallayout>
+            </para>
+
+            <para>
+                BitBake parses each <filename>conf/layer.conf</filename> file as specified in the 
+                <filename>BBLAYERS</filename> variable within the <filename>conf/bblayers.conf</filename>
+                file.
+                During the processing of each <filename>conf/layer.conf</filename> file, BitBake adds the 
+                recipes, classes and configurations contained within the particular layer to the Yocto 
+                Project.
+            </para>
+        </section>
+
+        <section id='using-bbappend-files'>
+            <title>Using .bbappend Files</title>
+
+            <para>
+                Recipes used to append metadata to other recipes are called BitBake append files.
+                BitBake append files use the <filename>.bbappend</filename> file type suffix, while  
+                underlying recipes to which metadata is being appended use the 
+                <filename>.bb</filename> file type suffix.
+            </para>
+
+            <para>
+                A <filename>.bbappend</filename> file allows your layer to make additions or 
+                changes to the content of another layer's recipe without having to copy the other 
+                recipe into your layer.
+                Your <filename>.bbappend</filename> file resides in your layer, while the underlying 
+                <filename>.bb</filename> recipe file to which you are appending metadata
+                resides in a different layer.
+            </para>
+
+            <para>
+                Append files files must have the same name as the underlying recipe.
+                For example, the append file <filename>someapp_&DISTRO;.bbappend</filename> must 
+                apply to <filename>someapp_&DISTRO;.bb</filename>.
+                This means the original recipe and append file names are version number specific.
+                If the underlying recipe is renamed to update to a newer version, the 
+                corresponding <filename>.bbappend</filename> file must be renamed as well.
+                During the build process, BitBake displays an error on starting if it detects a 
+                <filename>.bbappend</filename> file that does not have an underlying recipe 
+                with a matching name.
+            </para>
+
+            <para>
+                Being able to append information to an existing recipe not only avoids duplication, 
+                but also automatically applies recipe changes in a different layer to your layer.
+                If you were copying recipes, you would have to manually merge changes as they occur.
+            </para>
+
+            <para>
+                As an example, consider the main formfactor recipe and a corresponding formfactor 
+                append file both from the 
+                <link linkend='yocto-project-files'>Yocto Project Files</link>.
+                Here is the main formfactor recipe, which is named <filename>formfactor_0.0.bb</filename> and  
+                located in the meta layer at <filename>meta/recipes-bsp/formfactor</filename>:
+                <literallayout class='monospaced'>
+     DESCRIPTION = "Device formfactor information"
+     SECTION = "base"
+     LICENSE = "MIT"
+     LIC_FILES_CHKSUM = "file://${COREBASE}/LICENSE;md5=3f40d7994397109285ec7b81fdeb3b58 \
+                         file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+     PR = "r20"
+
+     SRC_URI = "file://config file://machconfig"
+     S = "${WORKDIR}"
+
+     PACKAGE_ARCH = "${MACHINE_ARCH}"
+     INHIBIT_DEFAULT_DEPS = "1"
+
+     do_install() {
+     	# Only install file if it has a contents
+             install -d ${D}${sysconfdir}/formfactor/
+             install -m 0644 ${S}/config ${D}${sysconfdir}/formfactor/
+     	if [ -s "${S}/machconfig" ]; then
+     	        install -m 0644 ${S}/machconfig ${D}${sysconfdir}/formfactor/
+     	fi
+     }
+                </literallayout>
+                Here is the append file, which is named <filename>formfactor_0.0.bbappend</filename> and is from the 
+                Crown Bay BSP Layer named <filename>meta-intel/meta-crownbay</filename>.
+                The file is in <filename>recipes-bsp/formfactor</filename>:
+                <literallayout class='monospaced'>
+     FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
+ 
+     PRINC = "1"
+                </literallayout>
+                This example adds or overrides files in 
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'><filename>SRC_URI</filename></ulink>
+                within a <filename>.bbappend</filename> by extending the path BitBake uses to search for files. 
+                The most reliable way to do this is by prepending the 
+                <filename>FILESEXTRAPATHS</filename> variable.
+                For example, if you have your files in a directory that is named the same as your package 
+                (<ulink url='&YOCTO_DOCS_REF_URL;#var-PN'><filename>PN</filename></ulink>),
+                you can add this directory by adding the following to your <filename>.bbappend</filename> file:
+                <literallayout class='monospaced'>
+     FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
+                </literallayout>
+                Using the immediate expansion assignment operator <filename>:=</filename> is important because 
+                of the reference to <filename>THISDIR</filename>.
+                The trailing colon character is important as it ensures that items in the list remain 
+                colon-separated.
+                <note>BitBake automatically defines the <filename>THISDIR</filename> variable.
+                    You should never set this variable yourself.
+                    Using <filename>_prepend</filename> ensures your path will be searched prior to other 
+                    paths in the final list.
+                </note>
+            </para>
+
+            <para>
+                For another example on how to use a <filename>.bbappend</filename> file, see the 
+                "<link linkend='changing-recipes-kernel'>Changing <filename>recipes-kernel</filename></link>"
+                section.
+            </para>
+        </section>
+
+        <section id='prioritizing-your-layer'>
+            <title>Prioritizing Your Layer</title>
+
+            <para>
+                Each layer is assigned a priority value.
+                Priority values control which layer takes precedence if there are recipe files with 
+                the same name in multiple layers.
+                For these cases, the recipe file from the layer with a higher priority number taking precedence.
+                Priority values also affect the order in which multiple <filename>.bbappend</filename> files 
+                for the same recipe are applied. 
+                You can either specify the priority manually, or allow the build system to calculate it
+                based on the layer's dependencies.
+            </para>
+
+            <para>
+                To specify the layer's priority manually, use the 
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-BBFILE_PRIORITY'><filename>BBFILE_PRIORITY</filename></ulink>
+                variable.
+                For example:
+                <literallayout class='monospaced'>
+     BBFILE_PRIORITY := "1"
+                </literallayout>
+            </para>
+
+            <note>
+                <para>It is possible for a recipe with a lower version number 
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-PV'><filename>PV</filename></ulink>
+                in a layer that has a higher priority to take precedence.</para>
+                <para>Also, the layer priority does not currently affect the precedence order of 
+                <filename>.conf</filename> or <filename>.bbclass</filename> files.
+                Future versions of BitBake might address this.</para>
+            </note>
+        </section>
+
+        <section id='managing-layers'>
+            <title>Managing Layers</title>
+
+            <para>
+                You can use the BitBake layer management tool to provide a view into the structure of 
+                recipes across a multi-layer project.
+                Being able to generate output that reports on configured layers with their paths and 
+                priorities and on <filename>.bbappend</filename> files and their applicable recipes
+                can help to reveal potential problems.
+            </para>
+
+            <para>
+                Use the following form when running the layer management tool.
+                <literallayout class='monospaced'>
+     $ bitbake-layers &lt;command&gt; [arguments]
+                </literallayout>
+                The following list describes the available commands:
+                <itemizedlist>
+                    <listitem><para><filename><emphasis>help:</emphasis></filename>
+                        Displays general help or help on a specified command.</para></listitem>
+                    <listitem><para><filename><emphasis>show-layers:</emphasis></filename>
+                        Show the current configured layers.</para></listitem>
+                    <listitem><para><filename><emphasis>show-recipes:</emphasis></filename>
+                        Lists available recipes and the layers that provide them.  
+                        </para></listitem>
+                    <listitem><para><filename><emphasis>show-overlayed:</emphasis></filename>
+                        Lists overlayed recipes.  
+                        A recipe is overlayed when a recipe with the same name exists in another layer 
+                        that has a higher layer priority.
+                        </para></listitem>
+                    <listitem><para><filename><emphasis>show-appends:</emphasis></filename>
+                        Lists <filename>.bbappend</filename> files and the recipe files to which
+                        they apply.</para></listitem>
+                    <listitem><para><filename><emphasis>flatten:</emphasis></filename>
+                        Flattens the layer configuration into a separate output directory.
+                        Flattening your layer configuration builds a "flattened" directory that contains
+                        the contents of all layers, with any overlayed recipes removed and any
+                        <filename>.bbappend</filename> files appended to the corresponding recipes.
+                        You might have to perform some manual cleanup of the flattened layer as follows:
+                        <itemizedlist>
+                            <listitem><para>Non-recipe files (such as patches) are overwritten.
+                                The flatten command shows a warning for these files.</para></listitem>
+                            <listitem><para>Anything beyond the normal layer setup has been added to 
+                                the <filename>layer.conf</filename> file.
+                                Only the lowest priority layer's <filename>layer.conf</filename> is used.
+                                </para></listitem>
+                            <listitem><para>Overridden and appended items from <filename>.bbappend</filename>
+                                files need to be cleaned up.
+                                The contents of each <filename>.bbappend</filename> end up in the 
+                                flattened recipe.
+                                However, if there are appended or changed variable values, you need to tidy 
+                                these up yourself.
+                                Consider the following example.
+                                Here, the <filename>bitbake-layers</filename> command adds the line
+                                <filename>#### bbappended ...</filename> so that you know where the following
+                                lines originate:
+                                <literallayout class='monospaced'>
+     ...
+     DESCRIPTION = "A useful utility"
+     ...
+     EXTRA_OECONF = "--enable-something"
+     ...
+
+     #### bbappended from meta-anotherlayer ####
+
+     DESCRIPTION = "Customized utility"
+     EXTRA_OECONF += "--enable-somethingelse"
+                                </literallayout>
+                                Ideally, you would tidy up these utilities as follows:
+                                <literallayout class='monospaced'>
+     ...
+     DESCRIPTION = "Customized utility"
+     ...
+     EXTRA_OECONF = "--enable-something --enable-somethingelse"
+     ...
+                                </literallayout></para></listitem>
+                        </itemizedlist></para></listitem>
+                </itemizedlist>
+            </para>
+        </section>
+    </section>
+
+    <section id='usingpoky-extend-customimage'>
+        <title>Customizing Images</title>
+
+        <para>
+            You can customize Yocto Project images to satisfy particular requirements. 
+            This section describes several methods and provides guidelines for each.
+        </para>
+
+        <section id='usingpoky-extend-customimage-custombb'>
+            <title>Customizing Images Using Custom .bb Files</title>
+
+            <para>
+                One way to get additional software into an image is to create a custom image. 
+                The following example shows the form for the two lines you need:
+                <literallayout class='monospaced'>
+     IMAGE_INSTALL = "task-core-x11-base package1 package2"
+
+     inherit core-image
+                </literallayout>
+            </para>
+
+            <para>
+                By creating a custom image, a developer has total control
+                over the contents of the image. 
+                It is important to use the correct names of packages in the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-IMAGE_INSTALL'>IMAGE_INSTALL</ulink></filename> 
+                variable. 
+                You must use the OpenEmbedded notation and not the Debian notation for the names 
+                (e.g. <filename>eglibc-dev</filename> instead of <filename>libc6-dev</filename>).
+            </para>
+
+            <para>
+                The other method for creating a custom image is to base it on an existing image. 
+                For example, if you want to create an image based on <filename>core-image-sato</filename>
+                but add the additional package <filename>strace</filename> to the image, 
+                copy the <filename>meta/recipes-sato/images/core-image-sato.bb</filename> to a 
+                new <filename>.bb</filename> and add the following line to the end of the copy:
+                <literallayout class='monospaced'>
+     IMAGE_INSTALL += "strace"
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='usingpoky-extend-customimage-customtasks'>
+            <title>Customizing Images Using Custom Tasks</title>
+
+            <para>
+                For complex custom images, the best approach is to create a custom task package
+                that is used to build the image or images. 
+                A good example of a tasks package is 
+                <filename>meta/recipes-core/tasks/task-core-boot.bb</filename>
+                The 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PACKAGES'>PACKAGES</ulink></filename> 
+                variable lists the task packages to build along with the complementary
+                <filename>-dbg</filename> and <filename>-dev</filename> packages. 
+                For each package added, you can use 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-RDEPENDS'>RDEPENDS</ulink></filename>
+                and 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-RRECOMMENDS'>RRECOMMENDS</ulink></filename> 
+                entries to provide a list of packages the parent task package should contain. 
+                Following is an example:
+                <literallayout class='monospaced'>
+     DESCRIPTION = "My Custom Tasks"
+
+     PACKAGES = "\
+         task-custom-apps \
+         task-custom-apps-dbg \
+         task-custom-apps-dev \
+         task-custom-tools \
+         task-custom-tools-dbg \
+         task-custom-tools-dev \
+         "
+
+     RDEPENDS_task-custom-apps = "\
+         dropbear \
+         portmap \
+         psplash"
+
+     RDEPENDS_task-custom-tools = "\
+         oprofile \
+         oprofileui-server \
+         lttng-control \
+         lttng-viewer"
+
+     RRECOMMENDS_task-custom-tools = "\
+         kernel-module-oprofile"
+                </literallayout>
+            </para>
+
+            <para>
+                In the previous example, two task packages are created with their dependencies and their
+                recommended package dependencies listed: <filename>task-custom-apps</filename>, and 
+                <filename>task-custom-tools</filename>. 
+                To build an image using these task packages, you need to add 
+                <filename>task-custom-apps</filename> and/or 
+                <filename>task-custom-tools</filename> to 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-IMAGE_INSTALL'>IMAGE_INSTALL</ulink></filename>.
+                For other forms of image dependencies see the other areas of this section.
+            </para>
+        </section>
+
+        <section id='usingpoky-extend-customimage-imagefeatures'>
+            <title>Customizing Images Using Custom <filename>IMAGE_FEATURES</filename> and 
+                <filename>EXTRA_IMAGE_FEATURES</filename></title>
+
+            <para>
+                Ultimately users might want to add extra image features to the set used by 
+                Yocto Project with the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-IMAGE_FEATURES'>IMAGE_FEATURES</ulink></filename>
+                variable. 
+                To create these features, the best reference is 
+                <filename>meta/classes/core-image.bbclass</filename>, which shows how the 
+                Yocto Project achieves this. 
+                In summary, the file looks at the contents of the 
+                <filename>IMAGE_FEATURES</filename>
+                variable and then maps that into a set of tasks or packages. 
+                Based on this information the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-IMAGE_INSTALL'> IMAGE_INSTALL</ulink></filename> 
+                variable is generated automatically. 
+                Users can add extra features by extending the class or creating a custom class for use 
+                with specialized image <filename>.bb</filename> files.
+                You can also add more features by configuring the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-EXTRA_IMAGE_FEATURES'>EXTRA_IMAGE_FEATURES</ulink></filename>
+                variable in the <filename>local.conf</filename> file found in the Yocto Project
+                files located in the build directory.
+            </para>
+
+            <para>
+                The Yocto Project ships with two SSH servers you can use in your images: 
+                Dropbear and OpenSSH. 
+                Dropbear is a minimal SSH server appropriate for resource-constrained environments,
+                while OpenSSH is a well-known standard SSH server implementation.
+                By default, the <filename>core-image-sato</filename> image is configured to use Dropbear.
+                The <filename>core-image-basic</filename> and <filename>core-image-lsb</filename>
+                images both include OpenSSH.
+                To change these defaults, edit the <filename>IMAGE_FEATURES</filename> variable
+                so that it sets the image you are working with to include 
+                <filename>ssh-server-dropbear</filename> or <filename>ssh-server-openssh</filename>.
+            </para>
+        </section>
+
+        <section id='usingpoky-extend-customimage-localconf'>
+            <title>Customizing Images Using <filename>local.conf</filename></title>
+
+            <para>
+                It is possible to customize image contents by using variables from your
+                local configuration in your <filename>conf/local.conf</filename> file. 
+                Because it is limited to local use, this method generally only allows you to 
+                add packages and is not as flexible as creating your own customized image.
+                When you add packages using local variables this way, you need to realize that 
+                these variable changes affect all images at the same time and might not be
+                what you require.
+            </para>
+
+            <para>
+                The simplest way to add extra packages to all images is by using the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-IMAGE_INSTALL'>IMAGE_INSTALL</ulink></filename>
+                variable with the <filename>_append</filename> operator:
+                <literallayout class='monospaced'>
+     IMAGE_INSTALL_append = " strace"
+                </literallayout>
+                Use of the syntax is important.
+                Specifically, the space between the quote and the package name, which is
+                <filename>strace</filename> in this example.
+                This space is required since the <filename>_append</filename>
+                operator does not add the space.
+            </para>
+
+            <para>
+                Furthermore, you must use <filename>_append</filename> instead of the <filename>+=</filename> 
+                operator if you want to avoid ordering issues. 
+                The reason for this is because doing so unconditionally appends to the variable and 
+                avoids ordering problems due to the variable being set in image recipes and 
+                <filename>.bbclass</filename> files with operators like <filename>?=</filename>.
+                Using <filename>_append</filename> ensures the operation takes affect.
+            </para>
+
+            <para>
+                As shown in its simplest use, <filename>IMAGE_INSTALL_append</filename> affects
+                all images.
+                It is possible to extend the syntax so that the variable applies to a specific image only.
+                Here is an example:
+                <literallayout class='monospaced'>
+     IMAGE_INSTALL_append_pn-core-image-minimal = " strace"
+                </literallayout>
+                This example adds <filename>strace</filename> to <filename>core-image-minimal</filename>
+                only.
+            </para>
+
+            <para>
+                You can add packages using a similar approach through the  
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-CORE_IMAGE_EXTRA_INSTALL'>CORE_IMAGE_EXTRA_INSTALL</ulink></filename> 
+                variable.
+                If you use this variable, only <filename>core-image-*</filename> images are affected.
+            </para>
+        </section>
+    </section>
+
+    <section id='usingpoky-extend-addpkg'>
+        <title>Adding a Package</title>
+
+        <para>
+            To add a package into the Yocto Project you need to write a recipe for it. 
+            Writing a recipe means creating a <filename>.bb</filename> file that sets some
+            variables.
+            For information on variables that are useful for recipes and for information about recipe naming
+            issues, see the 
+            "<ulink url='&YOCTO_DOCS_REF_URL;#ref-varlocality-recipe-required'>Required</ulink>" 
+            section of the Yocto Project Reference Manual.
+        </para>
+
+        <para>
+            Before writing a recipe from scratch, it is often useful to check
+            whether someone else has written one already. 
+            OpenEmbedded is a good place to look as it has a wider scope and range of packages.
+            Because the Yocto Project aims to be compatible with OpenEmbedded, most recipes 
+            you find there should work in Yocto Project.
+        </para>
+
+        <para>
+            For new packages, the simplest way to add a recipe is to base it on a similar
+            pre-existing recipe. 
+            The sections that follow provide some examples that show how to add standard 
+            types of packages.
+        </para>
+
+        <section id='usingpoky-extend-addpkg-singlec'>
+            <title>Single .c File Package (Hello World!)</title>
+
+            <para>
+                Building an application from a single file that is stored locally (e.g. under 
+                <filename>files/</filename>) requires a recipe that has the file listed in 
+                the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'>SRC_URI</ulink></filename>
+                variable. 
+                Additionally, you need to manually write the <filename>do_compile</filename> and
+                <filename>do_install</filename> tasks.
+                The <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-S'>S</ulink></filename> 
+                variable defines the 
+                directory containing the source code, which is set to 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-WORKDIR'>
+                WORKDIR</ulink></filename> in this case - the directory BitBake uses for the build.
+                <literallayout class='monospaced'>
+     DESCRIPTION = "Simple helloworld application"
+     SECTION = "examples"
+     LICENSE = "MIT"
+     LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+     PR = "r0"
+
+     SRC_URI = "file://helloworld.c"
+
+     S = "${WORKDIR}"
+
+     do_compile() {
+     	${CC} helloworld.c -o helloworld
+     }
+
+     do_install() {
+     	install -d ${D}${bindir}
+     	install -m 0755 helloworld ${D}${bindir}
+     }
+                </literallayout>
+            </para>
+
+            <para>
+                By default, the <filename>helloworld</filename>, <filename>helloworld-dbg</filename>,
+                and <filename>helloworld-dev</filename> packages are built. 
+                For information on how to customize the packaging process, see the
+                "<link linkend='splitting-an-application-into-multiple-packages'>Splitting an Application
+                into Multiple Packages</link>" section.
+            </para>
+        </section>
+
+        <section id='usingpoky-extend-addpkg-autotools'>
+            <title>Autotooled Package</title>
+            <para>
+                Applications that use Autotools such as <filename>autoconf</filename> and 
+                <filename>automake</filename> require a recipe that has a source archive listed in 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'>SRC_URI</ulink></filename> and 
+                also inherits Autotools, which instructs BitBake to use the
+                <filename>autotools.bbclass</filename> file, which contains the definitions of all the steps
+                needed to build an Autotool-based application.
+                The result of the build is automatically packaged. 
+                And, if the application uses NLS for localization, packages with local information are 
+                generated (one package per language). 
+                Following is one example: (<filename>hello_2.3.bb</filename>)
+                <literallayout class='monospaced'>
+     DESCRIPTION = "GNU Helloworld application"
+     SECTION = "examples"
+     LICENSE = "GPLv2+"
+     LIC_FILES_CHKSUM = "file://COPYING;md5=751419260aa954499f7abaabaa882bbe"
+     PR = "r0"
+
+     SRC_URI = "${GNU_MIRROR}/hello/hello-${PV}.tar.gz"
+
+     inherit autotools gettext
+                 </literallayout>
+            </para>
+
+            <para>
+                The variable 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-LIC_FILES_CHKSUM'>LIC_FILES_CHKSUM</ulink></filename> 
+                is used to track source license changes as described in the
+                "<ulink url='&YOCTO_DOCS_REF_URL;#usingpoky-configuring-LIC_FILES_CHKSUM'>Track License Changes</ulink>" section. 
+                You can quickly create Autotool-based recipes in a manner similar to the previous example.
+            </para>
+        </section>
+
+        <section id='usingpoky-extend-addpkg-makefile'>
+            <title>Makefile-Based Package</title>
+
+            <para>
+                Applications that use GNU <filename>make</filename> also require a recipe that has
+                the source archive listed in 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'>SRC_URI</ulink></filename>. 
+                You do not need to add a <filename>do_compile</filename> step since by default BitBake 
+                starts the <filename>make</filename> command to compile the application. 
+                If you need additional <filename>make</filename> options you should store them in the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-EXTRA_OEMAKE'>EXTRA_OEMAKE</ulink></filename>
+                variable.
+                BitBake passes these options into the <filename>make</filename> GNU invocation. 
+                Note that a <filename>do_install</filename> task is still required.
+                Otherwise BitBake runs an empty <filename>do_install</filename> task by default. 
+            </para>
+
+            <para>
+                Some applications might require extra parameters to be passed to the compiler.
+                For example, the application might need an additional header path. 
+                You can accomplish this by adding to the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-CFLAGS'>CFLAGS</ulink></filename> variable.
+                The following example shows this:
+                <literallayout class='monospaced'>
+     CFLAGS_prepend = "-I ${S}/include "
+                </literallayout>
+            </para>
+
+            <para>
+            In the following example, <filename>mtd-utils</filename> is a makefile-based package:
+                <literallayout class='monospaced'>
+     DESCRIPTION = "Tools for managing memory technology devices."
+     SECTION = "base"
+     DEPENDS = "zlib lzo e2fsprogs util-linux"
+     HOMEPAGE = "http://www.linux-mtd.infradead.org/"
+     LICENSE = "GPLv2+"
+     LIC_FILES_CHKSUM = "file://COPYING;md5=0636e73ff0215e8d672dc4c32c317bb3 \
+                    file://include/common.h;beginline=1;endline=17;md5=ba05b07912a44ea2bf81ce409380049c"
+
+     SRC_URI = "git://git.infradead.org/mtd-utils.git;protocol=git;tag=995cfe51b0a3cf32f381c140bf72b21bf91cef1b \
+	     	file://add-exclusion-to-mkfs-jffs2-git-2.patch"
+
+     S = "${WORKDIR}/git/"
+
+     PR = "r1"
+
+     EXTRA_OEMAKE = "'CC=${CC}' 'RANLIB=${RANLIB}' 'AR=${AR}' \
+        'CFLAGS=${CFLAGS} -I${S}/include -DWITHOUT_XATTR' 'BUILDDIR=${S}'"
+
+     do_install () {
+	     oe_runmake install DESTDIR=${D} SBINDIR=${sbindir} MANDIR=${mandir} \
+            INCLUDEDIR=${includedir}
+	     install -d ${D}${includedir}/mtd/
+	     for f in ${S}/include/mtd/*.h; do
+	     	install -m 0644 $f ${D}${includedir}/mtd/
+	     done
+     }
+
+     PARALLEL_MAKE = ""
+
+     BBCLASSEXTEND = "native"
+                </literallayout>
+            </para>
+
+            <para>
+                If your sources are available as a tarball instead of a Git repository, you
+                will need to provide the URL to the tarball as well as an 
+                <filename>md5</filename> or <filename>sha256</filename> sum of
+                the download. 
+                Here is an example:
+                <literallayout class='monospaced'>
+     SRC_URI="ftp://ftp.infradead.org/pub/mtd-utils/mtd-utils-1.4.9.tar.bz2"
+     SRC_URI[md5sum]="82b8e714b90674896570968f70ca778b"
+                </literallayout>
+                You can generate the <filename>md5</filename> or <filename>sha256</filename> sums 
+                by using the <filename>md5sum</filename> or <filename>sha256sum</filename> commands
+                with the target file as the only argument. 
+                Here is an example:
+                <literallayout class='monospaced'>
+     $ md5sum mtd-utils-1.4.9.tar.bz2 
+     82b8e714b90674896570968f70ca778b mtd-utils-1.4.9.tar.bz2
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='splitting-an-application-into-multiple-packages'>
+            <title>Splitting an Application into Multiple Packages</title>
+
+            <para>                        
+                You can use the variables 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PACKAGES'>PACKAGES</ulink></filename> and 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-FILES'>FILES</ulink></filename> 
+                to split an application into multiple packages.
+            </para>
+
+            <para>
+                Following is an example that uses the <filename>libXpm</filename> recipe. 
+                By default, this recipe generates a single package that contains the library along 
+                with a few binaries.  
+                You can modify the recipe to split the binaries into separate packages:
+                <literallayout class='monospaced'>
+     require xorg-lib-common.inc
+
+     DESCRIPTION = "X11 Pixmap library"
+     LICENSE = "X-BSD"
+     LIC_FILES_CHKSUM = "file://COPYING;md5=3e07763d16963c3af12db271a31abaa5"
+     DEPENDS += "libxext libsm libxt"
+     PR = "r3"
+     PE = "1"
+
+     XORG_PN = "libXpm"
+
+     PACKAGES =+ "sxpm cxpm"
+     FILES_cxpm = "${bindir}/cxpm"
+     FILES_sxpm = "${bindir}/sxpm"
+                </literallayout>
+            </para>
+
+            <para>
+                In the previous example, we want to ship the <filename>sxpm</filename>
+                and <filename>cxpm</filename> binaries in separate packages. 
+                Since <filename>bindir</filename> would be packaged into the main 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PN'>PN</ulink></filename> 
+                package by default, we prepend the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PACKAGES'>PACKAGES</ulink>
+                </filename> variable so additional package names are added to the start of list. 
+                This results in the extra 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-FILES'>FILES</ulink>_*</filename>
+                variables then containing information that define which files and
+                directories go into which packages. 
+                Files included by earlier packages are skipped by latter packages.
+                Thus, the main 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PN'>PN</ulink></filename> package 
+                does not include the above listed files.
+            </para>
+        </section>
+
+        <section id='including-static-library-files'>
+            <title>Including Static Library Files</title>
+
+            <para>                        
+                If you are building a library and the library offers static linking, you can control
+                which static library files (<filename>*.a</filename> files) get included in the 
+                built library.  
+            </para>
+
+            <para>
+                The <filename>PACKAGES</filename> and <filename>FILES_*</filename> variables in the 
+                <filename>meta/conf/bitbake.conf</filename> configuration file define how files installed
+                by the <filename>do_install</filename> task are packaged.
+                By default, the <filename>PACKAGES</filename> variable contains 
+                <filename>${PN}-staticdev</filename>, which includes all static library files.
+                <note>
+                    Previously released versions of the Yocto Project defined the static library files 
+                    through <filename>${PN}-dev</filename>.
+                </note>
+                Following, is part of the BitBake configuration file. 
+                You can see where the static library files are defined:
+                <literallayout class='monospaced'>
+     PACKAGES = "${PN}-dbg ${PN} ${PN}-doc ${PN}-dev ${PN}-staticdev ${PN}-locale"
+     PACKAGES_DYNAMIC = "${PN}-locale-*"
+     FILES = ""
+
+     FILES_${PN} = "${bindir}/* ${sbindir}/* ${libexecdir}/* ${libdir}/lib*${SOLIBS} \
+                 ${sysconfdir} ${sharedstatedir} ${localstatedir} \
+                 ${base_bindir}/* ${base_sbindir}/* \
+                 ${base_libdir}/*${SOLIBS} \
+                 ${datadir}/${BPN} ${libdir}/${BPN}/* \
+                 ${datadir}/pixmaps ${datadir}/applications \
+                 ${datadir}/idl ${datadir}/omf ${datadir}/sounds \
+                 ${libdir}/bonobo/servers"
+
+     FILES_${PN}-doc = "${docdir} ${mandir} ${infodir} ${datadir}/gtk-doc \
+                 ${datadir}/gnome/help"
+     SECTION_${PN}-doc = "doc"
+     
+     FILES_${PN}-dev = "${includedir} ${libdir}/lib*${SOLIBSDEV} ${libdir}/*.la \
+                     ${libdir}/*.o ${libdir}/pkgconfig ${datadir}/pkgconfig \
+                     ${datadir}/aclocal ${base_libdir}/*.o"
+     SECTION_${PN}-dev = "devel"
+     ALLOW_EMPTY_${PN}-dev = "1"
+     RDEPENDS_${PN}-dev = "${PN} (= ${EXTENDPKGV})"
+     
+     FILES_${PN}-staticdev = "${libdir}/*.a ${base_libdir}/*.a"
+     SECTION_${PN}-staticdev = "devel"
+     RDEPENDS_${PN}-staticdev = "${PN}-dev (= ${EXTENDPKGV})"
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='usingpoky-extend-addpkg-postinstalls'>
+            <title>Post Install Scripts</title>
+
+            <para>
+                To add a post-installation script to a package, add a <filename>pkg_postinst_PACKAGENAME()
+                </filename> function to the <filename>.bb</filename> file and use 
+                <filename>PACKAGENAME</filename> as the name of the package you want to attach to the 
+                <filename>postinst</filename> script.
+                Normally 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PN'>PN</ulink></filename>
+                can be used, which automatically expands to <filename>PACKAGENAME</filename>.
+                A post-installation function has the following structure:
+                <literallayout class='monospaced'>
+     pkg_postinst_PACKAGENAME () {
+     #!/bin/sh -e
+     # Commands to carry out
+     }
+                </literallayout>
+            </para>
+
+            <para>
+                The script defined in the post-installation function is called when the 
+                root filesystem is created. 
+                If the script succeeds, the package is marked as installed. 
+                If the script fails, the package is marked as unpacked and the script is
+                executed when the image boots again.
+            </para>
+
+            <para>
+                Sometimes it is necessary for the execution of a post-installation
+                script to be delayed until the first boot.  
+                For example, the script might need to be executed on the device itself. 
+                To delay script execution until boot time, use the following structure in the 
+                post-installation script:
+                <literallayout class='monospaced'>
+     pkg_postinst_PACKAGENAME () {
+     #!/bin/sh -e
+     if [ x"$D" = "x" ]; then
+          # Actions to carry out on the device go here
+     else
+          exit 1
+     fi
+     }
+                </literallayout>
+            </para>
+
+            <para>
+                The previous example delays execution until the image boots again because the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-D'>D</ulink></filename> 
+                variable points
+                to the directory containing the image when the root filesystem is created at build time but
+                is unset when executed on the first boot. 
+            </para>
+        </section>
+    </section>
+
+    <section id="platdev-newmachine">
+        <title>Porting the Yocto Project to a New Machine</title>
+
+<!--
+WRITER NOTES:
+
+I had this chat with Richard:
+
+scottrif: Terminology question:  We speak of "New Machines" or "Adding a New Machine" 
+          in YP.  Are "Machines" restricted to architectures? In poky/meta/conf/machine we have .conf 
+          files for the five architectures.  What exactly does the term "Machine" mean?
+
+      RP: no, each architecture has multiple different machines. A "machine" can correspond 
+          to a particular reference board or hardware product
+          we just have one reference machine per architecture
+          We're  a little vague sometimes as "machine" can refer to either an individual platform,
+          or in some cases a set of different platforms with common structure
+          (e.g. netbooks)
+
+scottrif: So our reference machines we supply are the five qemu* machines? 
+
+      RP: in oe-core, plus one "real" target in meta-yocto
+          (per arch)
+
+scottrif: I see four in meta-yocto/conf/machine.  Shouldn't there be five if there is one 
+          "real" target per architecture?
+
+      RP: yes, we don't have one for x86_64 :/
+
+scottrif: I think it is a bit difficult to map our four poky/meta-yocto/conf/machines to one of our 
+          five architectures.  Some have key words in there that identify the architecture but 
+          beagleboard and atom-pc don't.
+          We have a section that describes adding a Machine Configuration file to Yocto and 
+          it states that TARGET_ARCH is one of the most important variables that need to be 
+          set in the .conf file.  The four I am looking at don't have that variable.
+
+      RP: That has changed a little now. You need to include the appropriate tune file
+          which will set it for you
+          People had a tendency not to set all the right pieces so it got abstracted
+
+scottrif: Got it.  I see them in poky/meta/conf/machine/include.
+
+SOME CONCLUSIONS:
+
+I need to define the term machine.  It is confusing.  Then, this section needs to be cleared up
+so that there are some definite steps on how to do this.  I need more detail here.
+
+-->
+
+        <para>
+            Adding a new machine to the Yocto Project is a straightforward process. 
+            This section provides information that gives you an idea of the changes you must make.
+            The information covers adding machines similar to those the Yocto Project already supports. 
+            Although well within the capabilities of the Yocto Project, adding a totally new architecture 
+            might require 
+            changes to <filename>gcc/eglibc</filename> and to the site information, which is 
+            beyond the scope of this manual.
+        </para>
+
+        <para>
+            For a complete example that shows how to add a new machine to the Yocto Project, 
+            see the 
+            "<ulink url='&YOCTO_DOCS_DEV_URL;#dev-manual-bsp-appendix'>BSP Development Example</ulink>" 
+            in Appendix A.
+        </para>
+
+        <section id="platdev-newmachine-conffile">
+            <title>Adding the Machine Configuration File</title>
+
+            <para>
+                To add a machine configuration you need to add a <filename>.conf</filename> file
+                with details of the device being added to the <filename>conf/machine/</filename> file.
+                The name of the file determines the name the Yocto Project uses to reference the new machine.
+            </para>
+
+            <para>
+                The most important variables to set in this file are as follows:
+                <itemizedlist>
+                    <listitem><para><filename><ulink url='&YOCTO_DOCS_REF_URL;#var-TARGET_ARCH'>
+                        TARGET_ARCH</ulink></filename> (e.g. "arm")</para></listitem>
+                    <listitem><para><filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PREFERRED_PROVIDER'>
+                        PREFERRED_PROVIDER</ulink></filename>_virtual/kernel (see below)</para></listitem>
+                    <listitem><para><filename><ulink url='&YOCTO_DOCS_REF_URL;#var-MACHINE_FEATURES'>
+                        MACHINE_FEATURES</ulink></filename> (e.g. "apm screen wifi")</para></listitem>
+                </itemizedlist>
+            </para>
+
+            <para> 
+                You might also need these variables:
+                <itemizedlist>
+                    <listitem><para><filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SERIAL_CONSOLE'>
+                        SERIAL_CONSOLE</ulink></filename> (e.g. "115200 ttyS0")</para></listitem>
+                    <listitem><para><filename><ulink url='&YOCTO_DOCS_REF_URL;#var-KERNEL_IMAGETYPE'>
+                        KERNEL_IMAGETYPE</ulink></filename> (e.g. "zImage")</para></listitem>
+                    <listitem><para><filename><ulink url='&YOCTO_DOCS_REF_URL;#var-IMAGE_FSTYPES'>
+                        IMAGE_FSTYPES</ulink></filename> (e.g. "tar.gz jffs2")</para></listitem>
+                </itemizedlist>
+            </para>
+
+            <para> 
+                You can find full details on these variables in the reference section. 
+                You can leverage many existing machine <filename>.conf</filename> files from 
+                <filename>meta/conf/machine/</filename>.
+            </para>
+        </section>
+
+        <section id="platdev-newmachine-kernel">
+            <title>Adding a Kernel for the Machine</title>
+
+            <para>
+                The Yocto Project needs to be able to build a kernel for the machine. 
+                You need to either create a new kernel recipe for this machine, or extend an 
+                existing recipe. 
+                You can find several kernel examples in the 
+                Yocto Project file's <filename>meta/recipes-kernel/linux</filename>
+                directory that you can use as references.
+            </para>
+
+            <para>
+                If you are creating a new recipe, normal recipe-writing rules apply for setting 
+                up a 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'>SRC_URI</ulink></filename>. 
+                Thus, you need to specify any necessary patches and set 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-S'>S</ulink></filename> to point at the source code. 
+                You need to create a <filename>configure</filename> task that configures the 
+                unpacked kernel with a defconfig.
+                You can do this by using a <filename>make defconfig</filename> command or,
+                more commonly, by copying in a suitable <filename>defconfig</filename> file and and then running 
+                <filename>make oldconfig</filename>. 
+                By making use of <filename>inherit kernel</filename> and potentially some of the 
+                <filename>linux-*.inc</filename> files, most other functionality is 
+                centralized and the the defaults of the class normally work well.
+            </para>
+
+            <para>
+                If you are extending an existing kernel, it is usually a matter of adding a 
+                suitable defconfig file.
+                The file needs to be added into a location similar to defconfig files
+                used for other machines in a given kernel. 
+                A possible way to do this is by listing the file in the 
+                <filename>SRC_URI</filename> and adding the machine to the expression in 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-COMPATIBLE_MACHINE'>COMPATIBLE_MACHINE</ulink></filename>:
+                <literallayout class='monospaced'>
+     COMPATIBLE_MACHINE = '(qemux86|qemumips)'
+                </literallayout>
+            </para>
+        </section>
+
+        <section id="platdev-newmachine-formfactor">
+            <title>Adding a Formfactor Configuration File</title>
+
+            <para>
+                A formfactor configuration file provides information about the 
+                target hardware for which the Yocto Project is building and information that 
+                the Yocto Project cannot obtain from other sources such as the kernel.  
+                Some examples of information contained in a formfactor configuration file include 
+                framebuffer orientation, whether or not the system has a keyboard, 
+                the positioning of the keyboard in relation to the screen, and 
+                the screen resolution.
+            </para>
+
+            <para>
+                The Yocto Project uses reasonable defaults in most cases, but if customization is 
+                necessary you need to create a <filename>machconfig</filename> file 
+                in the Yocto Project file's <filename>meta/recipes-bsp/formfactor/files</filename>
+                directory.
+                This directory contains directories for specific machines such as 
+                <filename>qemuarm</filename> and <filename>qemux86</filename>.
+                For information about the settings available and the defaults, see the 
+                <filename>meta/recipes-bsp/formfactor/files/config</filename> file found in the
+                same area. 
+                Following is an example for qemuarm:
+                <literallayout class='monospaced'>
+     HAVE_TOUCHSCREEN=1
+     HAVE_KEYBOARD=1
+
+     DISPLAY_CAN_ROTATE=0
+     DISPLAY_ORIENTATION=0
+     #DISPLAY_WIDTH_PIXELS=640
+     #DISPLAY_HEIGHT_PIXELS=480
+     #DISPLAY_BPP=16
+     DISPLAY_DPI=150
+     DISPLAY_SUBPIXEL_ORDER=vrgb
+                </literallayout>
+            </para>
+        </section>
+    </section>
+
+    <section id="modifying-temporary-source-code">
+        <title>Modifying Temporary Source Code</title>
+
+        <para>
+            Although the Yocto Project is typically used to build software, you might
+            find it helpful during development to modify the temporary source code used by recipes
+            to build packages.
+            For example, suppose you are developing a patch and you need to experiment a bit
+            to figure out your solution.
+            After you have initially built the package, you can iteratively tweak the 
+            source code, which is located in the 
+            <link linkend='yocto-project-build-directory'>Yocto Project's Build Directory</link>, and then 
+            you can force a re-compile and quickly test your altered code.
+            Once you settle on a solution, you can then preserve your changes in the form of 
+            patches.
+            You can accomplish these steps all within either a 
+            <ulink url='http://savannah.nongnu.org/projects/quilt'>Quilt</ulink> or 
+            <link linkend='git'>Git</link> workflow.
+        </para>
+
+        <section id='finding-the-temporary-source-code'>
+            <title>Finding the Temporary Source Code</title>
+
+            <para>
+                During a build, the unpacked temporary source code used by recipes 
+                to build packages is available in the Yocto Project Build Directory as 
+                defined by the 
+                <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-S'>S</ulink></filename> variable.
+                Below is the default value for the <filename>S</filename> variable as defined in the 
+                <filename>meta/conf/bitbake.conf</filename> configuration file in the 
+                <link linkend='yocto-project-files'>Yocto Project Files</link>:
+                <literallayout class='monospaced'>
+     S = ${WORKDIR}/${BP}
+                </literallayout>
+                You should be aware that many recipes override the <filename>S</filename> variable.
+                For example, recipes that fetch their source from Git usually set 
+                <filename>S</filename> to <filename>${WORKDIR}/git</filename>.
+                <note>
+                    <filename>BP</filename> represents the "Base Package", which is the base package
+                    name and the package version:
+                    <literallayout class='monospaced'>
+     BP = ${BPN}-${PV}
+                    </literallayout>
+                </note> 
+            </para>
+
+            <para>
+                The path to the work directory for the recipe 
+                (<ulink url='&YOCTO_DOCS_REF_URL;#var-WORKDIR'><filename>WORKDIR</filename></ulink>) depends
+                on the package name and the architecture of the target device.
+                For example, here is the work directory for packages whose targets are not device-dependent:
+                <literallayout class='monospaced'>
+     ${TMPDIR}/work/${PACKAGE_ARCH}-poky-${TARGET_OS}/${PN}-${PV}-${PR}
+                </literallayout>
+                Let's look at an example without variables.
+                Assuming a Yocto Project Files top-level directory named <filename>poky</filename>
+                and a default Yocto Project Build Directory of <filename>poky/build</filename>, 
+                the following is the work directory for the <filename>acl</filename> package:
+                <literallayout class='monospaced'>
+     ~/poky/build/tmp/work/i586-poky-linux/acl-2.2.51-r3
+                </literallayout>
+            </para>
+
+            <para>
+                If your package is dependent on the target device, the work directory varies slightly:
+                <literallayout class='monospaced'>
+     ${TMPDIR}/work/${MACHINE}-poky-${TARGET_OS}/${PN}-${PV}-${PR}
+                </literallayout>
+                Again, assuming a Yocto Project Files top-level directory named <filename>poky</filename>
+                and a default Yocto Project Build Directory of <filename>poky/build</filename>, the 
+                following is the work directory for the <filename>acl</filename> package that is being 
+                built for a MIPS-based device:
+                <literallayout class='monospaced'>
+     ~/poky/build/tmp/work/mips-poky-linux/acl-2.2.51-r2
+                </literallayout>
+            </para>
+
+            <note>
+                To better understand how the Yocto Project build system resolves directories during the 
+                build process, see the glossary entries for the
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-WORKDIR'><filename>WORKDIR</filename></ulink>,
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-TMPDIR'><filename>TMPDIR</filename></ulink>,
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-TOPDIR'><filename>TOPDIR</filename></ulink>,
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-PACKAGE_ARCH'><filename>PACKAGE_ARCH</filename></ulink>,
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-TARGET_OS'><filename>TARGET_OS</filename></ulink>,
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-PN'><filename>PN</filename></ulink>,
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-PV'><filename>PV</filename></ulink>,
+                and
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-PR'><filename>PR</filename></ulink>
+                variables in the Yocto Project Reference Manual.
+            </note>
+
+            <para>
+                Now that you know where to locate the directory that has the temporary source code, you can use a 
+                Quilt or Git workflow to make your edits, test the changes, and preserve the 
+                changes in the form of patches.
+            </para>
+        </section>
+
+        <section id="using-a-quilt-workflow">
+            <title>Using a Quilt Workflow</title>
+            
+            <para>
+                <ulink url='http://savannah.nongnu.org/projects/quilt'>Quilt</ulink>
+                is a powerful tool that allows you to capture source code changes without having 
+                a clean source tree.
+                This section outlines the typical workflow you can use to modify temporary source code, 
+                test changes, and then preserve the changes in the form of a patch all using Quilt.
+            </para>
+
+            <para>
+                Follow these general steps:
+                <orderedlist>
+                    <listitem><para><emphasis>Find the Source Code:</emphasis>
+                        The temporary source code used by the Yocto Project build system is kept in the 
+                        Yocto Project Build Directory.  
+                        See the 
+                        "<link linkend='finding-the-temporary-source-code'>Finding the Temporary Source Code</link>"
+                        section to learn how to locate the directory that has the temporary source code for a 
+                        particular package.</para></listitem>
+                    <listitem><para><emphasis>Change Your Working Directory:</emphasis>
+                        You need to be in the directory that has the temporary source code.
+                        That directory is defined by the 
+                        <ulink url='&YOCTO_DOCS_REF_URL;#var-S'>S</ulink>
+                        variable.</para></listitem>
+                    <listitem><para><emphasis>Create a New Patch:</emphasis>
+                        Before modifying source code, you need to create a new patch.
+                        To create a new patch file, use <filename>quilt new</filename> as below:
+                        <literallayout class='monospaced'>
+     $ quilt new my_changes.patch
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Notify Quilt and Add Files:</emphasis>
+                        After creating the patch, you need to notify Quilt about the files you will 
+                        be changing.
+                        Add the files you will be modifying into the patch you just created:
+                        <literallayout class='monospaced'>
+     $ quilt add file1.c file2.c file3.c
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Edit the Files:</emphasis>
+                        Make the changes to the temporary source code.</para></listitem>
+                    <listitem><para><emphasis>Test Your Changes:</emphasis>
+                        Once you have modified the source code, the easiest way to test your changes 
+                        is by calling the <filename>compile</filename> task as shown in the following example:
+                        <literallayout class='monospaced'>
+     $ bitbake -c compile -f &lt;name_of_package&gt;
+                        </literallayout>
+                        The <filename>-f</filename> or <filename>--force</filename>
+                        option forces re-execution of the specified task.
+                        If you find problems with your code, you can just keep editing and 
+                        re-testing iteratively until things work as expected.
+                        <note>All the modifications you make to the temporary source code
+                        disappear once you <filename>-c clean</filename> or 
+                        <filename>-c cleanall</filename> with BitBake for the package.
+                        Modifications will also disappear if you use the <filename>rm_work</filename>
+                        feature as described in the
+                        "<ulink url='&YOCTO_DOCS_QS_URL;#building-image'>Building an Image</ulink>" 
+                        section of the Yocto Project Quick Start.
+                        </note></para></listitem>
+                    <listitem><para><emphasis>Generate the Patch:</emphasis>
+                        Once your changes work as expected, you need to use Quilt to generate the final patch that 
+                        contains all your modifications.
+                        <literallayout class='monospaced'>
+     $ quilt refresh
+                        </literallayout>
+                        At this point the <filename>my_changes.patch</filename> file has all your edits made 
+                        to the <filename>file1.c</filename>, <filename>file2.c</filename>, and 
+                        <filename>file3.c</filename> files.</para>
+                        <para>You can find the resulting patch file in the <filename>patches/</filename> 
+                        subdirectory of the source (<filename>S</filename>) directory.</para></listitem>
+                    <listitem><para><emphasis>Copy the Patch File:</emphasis> 
+                        For simplicity, copy the patch file into a directory named <filename>files</filename>,
+                        which you can create in the same directory as the recipe.
+                        Placing the patch here guarantees that the Yocto Project build system will find
+                        the patch.
+                        Next, add the patch into the  
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'>SRC_URI</ulink></filename> 
+                        of the recipe.  
+                        Here is an example:
+                        <literallayout class='monospaced'>
+     SRC_URI += "file://my_changes.patch"
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Increment the Package Revision Number:</emphasis>
+                        Finally, don't forget to 'bump' the 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PR'>PR</ulink></filename>
+                        value in the same recipe since the resulting packages have changed.</para></listitem>
+                </orderedlist>
+            </para>
+        </section>
+
+        <section id='using-a-git-workflow'>
+            <title>Using a Git Workflow</title>
+            <para>
+                Git is an even more powerful tool that allows you to capture source code changes without having 
+                a clean source tree.
+                This section outlines the typical workflow you can use to modify temporary source code, 
+                test changes, and then preserve the changes in the form of a patch all using Git.
+                For general information on Git as it is used in the Yocto Project, see the 
+                "<link linkend='git'>Git</link>" section.
+            </para>
+
+            <note>
+                This workflow uses Git only for its ability to manage local changes to the source code 
+                and produce patches independent of any version control used on the Yocto Project 
+                Files.
+            </note>
+
+            <para>
+                Follow these general steps:
+                <orderedlist>
+                    <listitem><para><emphasis>Find the Source Code:</emphasis>
+                        The temporary source code used by the Yocto Project build system is kept in the 
+                        Yocto Project Build Directory.  
+                        See the 
+                        "<link linkend='finding-the-temporary-source-code'>Finding the Temporary Source Code</link>"
+                        section to learn how to locate the directory that has the temporary source code for a 
+                        particular package.</para></listitem>
+                    <listitem><para><emphasis>Change Your Working Directory:</emphasis>
+                        You need to be in the directory that has the temporary source code.
+                        That directory is defined by the 
+                        <ulink url='&YOCTO_DOCS_REF_URL;#var-S'>S</ulink>
+                        variable.</para></listitem>
+                    <listitem><para><emphasis>Initialize a Git Repository:</emphasis>
+                        Use the <filename>git init</filename> command to initialize a new local repository
+                        that is based on the work directory:
+                        <literallayout class='monospaced'>
+     $ git init
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Stage all the files:</emphasis>
+                        Use the <filename>git add *</filename> command to stage all the files in the source
+                        code directory so that they can be committed:
+                        <literallayout class='monospaced'>
+     $ git add *
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Commit the Source Files:</emphasis>
+                        Use the <filename>git commit</filename> command to initially commit all the files in 
+                        the work directory:
+                        <literallayout class='monospaced'>
+     $ git commit
+                        </literallayout>
+                        At this point, your Git repository is aware of all the source code files.
+                        Any edits you now make to files will be tracked by Git.</para></listitem>
+                    <listitem><para><emphasis>Edit the Files:</emphasis>
+                        Make the changes to the temporary source code.</para></listitem>
+                    <listitem><para><emphasis>Test Your Changes:</emphasis>
+                        Once you have modified the source code, the easiest way to test your changes 
+                        is by calling the <filename>compile</filename> task as shown in the following example:
+                        <literallayout class='monospaced'>
+     $ bitbake -c compile -f &lt;name_of_package&gt;
+                        </literallayout>
+                        The <filename>-f</filename> or <filename>--force</filename>
+                        option forces re-execution of the specified task.
+                        If you find problems with your code, you can just keep editing and 
+                        re-testing iteratively until things work as expected.
+                        <note>All the modifications you make to the temporary source code
+                        disappear once you <filename>-c clean</filename> or 
+                        <filename>-c cleanall</filename> with BitBake for the package.
+                        Modifications will also disappear if you use the <filename>rm_work</filename>
+                        feature as described in the
+                        "<ulink url='&YOCTO_DOCS_QS_URL;#building-image'>Building an Image</ulink>" 
+                        section of the Yocto Project Quick Start.
+                        </note></para></listitem>
+                    <listitem><para><emphasis>See the List of Files You Changed:</emphasis>
+                        Use the <filename>git status</filename> command to see what files you have actually edited. 
+                        The ability to have Git track the files you have changed is an advantage that this
+                        workflow has over the Quilt workflow.
+                        Here is the Git command to list your changed files:
+                        <literallayout class='monospaced'>
+     $ git status
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Stage the Modified Files:</emphasis>
+                        Use the <filename>git add</filename> command to stage the changed files so they
+                        can be committed as follows:
+                        <literallayout class='monospaced'>
+     $ git add file1.c file2.c file3.c
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Commit the Staged Files and View Your Changes:</emphasis>
+                        Use the <filename>git commit</filename> command to commit the changes to the 
+                        local repository.  
+                        Once you have committed the files, you can use the <filename>git log</filename>
+                        command to see your changes:
+                        <literallayout class='monospaced'>
+     $ git commit
+     $ git log
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Generate the Patch:</emphasis>
+                        Once the changes are committed, use the <filename>git format-patch</filename>
+                        command to generate a patch file:
+                        <literallayout class='monospaced'>
+     $ git format-patch HEAD~1
+                        </literallayout>
+                        The <filename>HEAD~1</filename> part of the command causes Git to generate the 
+                        patch file for the most recent commit.</para>
+                        <para>At this point, the patch file has all your edits made 
+                        to the <filename>file1.c</filename>, <filename>file2.c</filename>, and 
+                        <filename>file3.c</filename> files.
+                        You can find the resulting patch file in the current directory.
+                        The patch file ends with <filename>.patch</filename>.</para></listitem>
+                    <listitem><para><emphasis>Copy the Patch File:</emphasis> 
+                        For simplicity, copy the patch file into a directory named <filename>files</filename>,
+                        which you can create in the same directory as the recipe.
+                        Placing the patch here guarantees that the Yocto Project build system will find
+                        the patch.
+                        Next, add the patch into the  
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'>SRC_URI</ulink></filename> 
+                        of the recipe.  
+                        Here is an example:
+                        <literallayout class='monospaced'>
+     SRC_URI += "file://my_changes.patch"
+                        </literallayout></para></listitem>
+                    <listitem><para><emphasis>Increment the Package Revision Number:</emphasis>
+                        Finally, don't forget to 'bump' the 
+                        <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PR'>PR</ulink></filename>
+                        value in the same recipe since the resulting packages have changed.</para></listitem>
+                </orderedlist>
+            </para>
+        </section>
+    </section>
+
+    <section id="building-multiple-architecture-libraries-into-one-image">
+        <title>Combining Multiple Versions of Library Files into One Image</title>
+
+        <para>
+            The build system offers the ability to build libraries with different
+            target optimizations or architecture formats and combine these together
+            into one system image. 
+            You can link different binaries in the image 
+            against the different libraries as needed for specific use cases.
+            This feature is called "Multilib."
+        </para>
+
+        <para>
+            An example would be where you have most of a system compiled in 32-bit
+            mode using 32-bit libraries, but you have something large, like a database
+            engine, that needs to be a 64-bit application and use 64-bit libraries.
+            Multilib allows you to get the best of both 32-bit and 64-bit libraries.
+        </para>
+
+        <para>
+            While the Multilib feature is most commonly used for 32 and 64-bit differences,
+            the approach the build system uses facilitates different target optimizations. 
+            You could compile some binaries to use one set of libraries and other binaries
+            to use other different sets of libraries.
+            The libraries could differ in architecture, compiler options, or other 
+            optimizations.
+        </para>
+
+        <para>
+            This section overviews the Multilib process only. 
+            For more details on how to implement Multilib, see the 
+            <ulink url='&YOCTO_WIKI_URL;/wiki/Multilib'>Multilib</ulink> wiki 
+            page.
+        </para>
+
+        <section id='preparing-to-use-multilib'>
+            <title>Preparing to use Multilib</title>
+
+            <para>
+                User-specific requirements drive the Multilib feature,
+                Consequently, there is no one "out-of-the-box" configuration that likely
+                exists to meet your needs.
+            </para>
+
+            <para>
+                In order to enable Multilib, you first need to ensure your recipe is
+                extended to support multiple libraries. 
+                Many standard recipes are already extended and support multiple libraries.
+                You can check in the <filename>meta/conf/multilib.conf</filename>
+                configuration file in the Yocto Project files directory to see how this is 
+                done using the <filename>BBCLASSEXTEND</filename> variable.
+                Eventually, all recipes will be covered and this list will be unneeded.
+            </para>
+  
+            <para>
+                For the most part, the Multilib class extension works automatically to
+                extend the package name from <filename>${PN}</filename> to
+                <filename>${MLPREFIX}${PN}</filename>, where <filename>MLPREFIX</filename>
+                is the particular multilib (e.g. "lib32-" or "lib64-"). 
+                Standard variables such as <filename>DEPENDS</filename>, 
+                <filename>RDEPENDS</filename>, <filename>RPROVIDES</filename>, 
+                <filename>RRECOMMENDS</filename>, <filename>PACKAGES</filename>, and 
+                <filename>PACKAGES_DYNAMIC</filename> are automatically extended by the system.
+                If you are extending any manual code in the recipe, you can use the 
+                <filename>${MLPREFIX}</filename> variable to ensure those names are extended 
+                correctly. 
+                This automatic extension code resides in <filename>multilib.bbclass</filename>.
+            </para>
+        </section>
+
+        <section id='using-multilib'>
+            <title>Using Multilib</title>
+
+            <para>
+                After you have set up the recipes, you need to define the actual
+                combination of multiple libraries you want to build. 
+                You accomplish this through your <filename>local.conf</filename>
+                configuration file in the 
+                <link linkend='yocto-project-build-directory'>Yocto Project Build Directory</link>. 
+                An example configuration would be as follows:
+                <literallayout class='monospaced'>
+     MACHINE = "qemux86-64"
+     require conf/multilib.conf
+     MULTILIBS = "multilib:lib32"
+     DEFAULTTUNE_virtclass-multilib-lib32 = "x86"
+     IMAGE_INSTALL = "lib32-connman"
+                </literallayout>
+                This example enables an
+                additional library named <filename>lib32</filename> alongside the 
+                normal target packages.
+                When combining these "lib32" alternatives, the example uses "x86" for tuning.
+                For information on this particular tuning, see
+                <filename>meta/conf/machine/include/ia32/arch-ia32.inc</filename>.
+            </para>
+
+            <para>
+                The example then includes <filename>lib32-connman</filename>
+                in all the images, which illustrates one method of including a 
+                multiple library dependency. 
+                You can use a normal image build to include this dependency,
+                for example:
+                <literallayout class='monospaced'>
+     $ bitbake core-image-sato
+                </literallayout>
+                You can also build Multilib packages specifically with a command like this:
+                <literallayout class='monospaced'>
+     $  bitbake lib32-connman
+                </literallayout>
+            </para>
+        </section>
+
+        <section id='additional-implementation-details'>
+            <title>Additional Implementation Details</title>
+
+            <para>
+                Different packaging systems have different levels of native Multilib
+                support. 
+                For the RPM Package Management System, the following implementation details 
+                exist:
+                <itemizedlist>
+                    <listitem><para>A unique architecture is defined for the Multilib packages,
+                        along with creating a unique deploy folder under 
+                        <filename>tmp/deploy/rpm</filename> in the 
+                        <link linkend='yocto-project-build-directory'>Yocto Project Build Directory</link>. 
+                        For example, consider <filename>lib32</filename> in a 
+                        <filename>qemux86-64</filename> image. 
+                        The possible architectures in the system are "all", "qemux86_64",
+                        "lib32_qemux86_64", and "lib32_x86".</para></listitem>
+                    <listitem><para>The <filename>${MLPREFIX}</filename> variable is stripped from 
+                        <filename>${PN}</filename> during RPM packaging.
+                        The naming for a normal RPM package and a Multilib RPM package in a
+                        <filename>qemux86-64</filename> system resolves to something similar to
+                        <filename>bash-4.1-r2.x86_64.rpm</filename> and 
+                        <filename>bash-4.1.r2.lib32_x86.rpm</filename>, respectively.
+                        </para></listitem>
+                    <listitem><para>When installing a Multilib image, the RPM backend first 
+                        installs the base image and then installs the Multilib libraries.
+                        </para></listitem>
+                    <listitem><para>The build system relies on RPM to resolve the identical files in the 
+                        two (or more) Multilib packages.</para></listitem>
+                </itemizedlist>
+            </para>
+
+            <para>
+                For the IPK Package Management System, the following implementation details exist:
+                <itemizedlist>
+                    <listitem><para>The <filename>${MLPREFIX}</filename> is not stripped from 
+                        <filename>${PN}</filename> during IPK packaging.
+                        The naming for a normal RPM package and a Multilib IPK package in a
+                        <filename>qemux86-64</filename> system resolves to something like 
+                        <filename>bash_4.1-r2.x86_64.ipk</filename> and
+                        <filename>lib32-bash_4.1-rw_x86.ipk</filename>, respectively.
+                        </para></listitem>
+                    <listitem><para>The IPK deploy folder is not modified with 
+                        <filename>${MLPREFIX}</filename> because packages with and without 
+                        the Multilib feature can exist in the same folder due to the 
+                        <filename>${PN}</filename> differences.</para></listitem>
+                    <listitem><para>IPK defines a sanity check for Multilib installation 
+                        using certain rules for file comparison, overridden, etc.
+                        </para></listitem>
+                </itemizedlist>
+            </para>
+        </section> 
+    </section>
+
+    <section id='configuring-the-kernel'>
+        <title>Configuring the Kernel</title>
+
+        <para>
+            Configuring the Linux Yocto kernel consists of making sure the <filename>.config</filename>
+            file has all the right information in it for the image you are building.
+            You can use the <filename>menuconfig</filename> tool and configuration fragments to 
+            make sure your <filename>.config</filename> file is just how you need it. 
+            This section describes how to use <filename>menuconfig</filename>, create and use 
+            configuration fragments, and how to interactively tweak your <filename>.config</filename>
+            file to create the leanest kernel configuration file possible.
+        </para>
+
+        <para>
+            For concepts on kernel configuration, see the
+            "<ulink url='&YOCTO_DOCS_KERNEL_URL;#kernel-configuration'>Kernel Configuration</ulink>"
+            section in the Yocto Project Kernel Architecture and Use Manual.
+        </para>
+
+        <section id='using-menuconfig'>
+            <title>Using&nbsp;&nbsp;<filename>menuconfig</filename></title>
+ 
+            <para>
+                The easiest way to define kernel configurations is to set them through the
+                <filename>menuconfig</filename> tool.
+                For general information on <filename>menuconfig</filename>, see
+                <ulink url='http://en.wikipedia.org/wiki/Menuconfig'></ulink>.
+            </para>
+
+            <para>
+                To use the <filename>menuconfig</filename> tool in the Yocto Project development
+                environment, you must build the tool using BitBake.
+                The following commands build and invoke <filename>menuconfig</filename> assuming the 
+                Yocto Project files top-level directory is <filename>~/poky</filename>:
+                <literallayout class='monospaced'>
+     $ cd ~/poky
+     $ source oe-init-build-env
+     $ bitbake linux-yocto -c menuconfig
+                </literallayout>
+                Once <filename>menuconfig</filename> comes up, its standard interface allows you to 
+                examine and configure all the kernel configuration parameters.
+                Once you have made your changes, simply exit the tool and save your changes to 
+                create an updated version of the <filename>.config</filename> configuration file.
+            </para>
+
+            <para>
+                For an example that shows how to change the <filename>SMP_CONFIG</filename> parameter
+                using <filename>menuconfig</filename>, see the 
+                "<link linkend='changing-the-config-smp-configuration-using-menuconfig'>Changing
+                the <filename>CONFIG_SMP</filename> Configuration Using <filename>menuconfig</filename></link>" 
+                section.
+            </para>
+        </section>
+
+        <section id='creating-config-fragments'>
+            <title>Creating Config Fragments</title>
+
+            <para>
+                Configuration fragments are simply kernel options that appear in a file.
+                Syntactically, the configuration statement is identical to what would appear
+                in the <filename>.config</filename>.
+                For example, issuing the following from the shell would create a config fragment
+                file named <filename>my_smp.cfg</filename> that enables multi-processor support
+                within the kernel:
+                <literallayout class='monospaced'>
+     $ echo "CONFIG_SMP=y" >> my_smp.cfg
+                </literallayout>
+            </para>
+
+            <para>
+                Where do you put your configuration files?
+                You can place these configuration files in the same area pointed to by  
+                <filename>SRC_URI</filename>.
+                The Yocto Project build process will pick up the configuration and add it to the 
+                kernel's configuration.
+                For example, assume you add the following to your 
+                <filename>linux-yocto_3.0.bbappend</filename> file:
+                <literallayout class='monospaced'>
+     file://my_smp.cfg
+                </literallayout>
+                You would put the config fragment file <filename>my_smp.cfg</filename> in a 
+                sub-directory with the same root name (<filename>linux-yocto</filename>)
+                beneath the directory that contains your <filename>linux-yocto_3.0.bbappend</filename> 
+                file and the build system will pick up and apply the fragment.
+            </para>
+        </section>
+
+        <section id='fine-tuning-the-kernel-configuration-file'>
+            <title>Fine-tuning the Kernel Configuration File</title>
+
+            <para>
+                You can make sure the <filename>.config</filename> is as lean or efficient as 
+                possible by reading the output of the kernel configuration fragment audit,
+                noting any issues, making changes to correct the issues, and then repeating.
+            </para>
+
+            <para>
+                As part of the Linux Yocto kernel build process, the 
+                <filename>kernel_configcheck</filename> task runs.
+                This task validates the kernel configuration by checking the final 
+                <filename>.config</filename> file against the input files.
+                During the check, the task produces warning messages for the following 
+                issues:
+                <itemizedlist>
+                    <listitem><para>Requested options that did not make the final 
+                        <filename>.config</filename> file.</para></listitem>
+                    <listitem><para>Configuration items that appear twice in the same 
+                        configuration fragment.</para></listitem>
+                    <listitem><para>Configuration items tagged as 'required' were overridden.
+                        </para></listitem>
+                    <listitem><para>A board overrides a non-board specific option.</para></listitem>
+                    <listitem><para>Listed options not valid for the kernel being processed. 
+                        In other words, the option does not appear anywhere.</para></listitem>
+                </itemizedlist>
+                <note>
+                    The <filename>kernel_configcheck</filename> task can also optionally report
+                    if an option is overridden during processing.
+                </note>
+            </para>
+
+            <para>
+                For each output warning, a message points to the file
+                that contains a list of the options and a pointer to the config
+                fragment that defines them.
+                Collectively, the files are the key to streamlining the configuration.
+            </para>
+
+            <para>
+                To streamline the configuration, do the following:
+                <orderedlist>
+                    <listitem><para>Start with a full configuration that you know
+                        works - it builds and boots successfully.
+                        This configuration file will be your baseline.</para></listitem>
+                    <listitem><para>Separately run the <filename>configme</filename> and 
+                        <filename>kernel_configcheck</filename> tasks.</para></listitem>
+                    <listitem><para>Take the resulting list of files from the 
+                        <filename>kernel_configcheck</filename> task warnings and do the following:
+                        <itemizedlist>
+                            <listitem><para>Drop values that are redefined in the fragment but do not
+                                change the final <filename>.config</filename> file.</para></listitem>
+                            <listitem><para>Analyze and potentially drop values from the 
+                                <filename>.config</filename> file that override required 
+                                configurations.</para></listitem>
+                            <listitem><para>Analyze and potentially remove non-board specific options.
+                                </para></listitem>
+                            <listitem><para>Remove repeated and invalid options.</para></listitem>
+                        </itemizedlist></para></listitem>
+                    <listitem><para>After you have worked through the output of the kernel configuration 
+                        audit, you can re-run the <filename>configme</filename> 
+                        and <filename>kernel_configcheck</filename> tasks to see the results of your 
+                        changes. 
+                        If you have more issues, you can deal with them as described in the 
+                        previous step.</para></listitem>
+                </orderedlist> 
+            </para>
+
+            <para>
+                Iteratively working through steps two through four eventually yields 
+                a minimal, streamlined configuration file.
+                Once you have the best <filename>.config</filename>, you can build the Linux
+                Yocto kernel.
+            </para>
+        </section>
+    </section>
+
+    <section id="usingpoky-changes-updatingimages">
+        <title>Updating Existing Images</title>
+
+        <para>
+            Often, rather than re-flashing a new image, you might wish to install updated 
+            packages into an existing running system. 
+            You can do this by first sharing the <filename>tmp/deploy/ipk/</filename> directory
+            through a web server and then by changing <filename>/etc/opkg/base-feeds.conf</filename> 
+            to point at the shared server.
+            Following is an example:
+            <literallayout class='monospaced'>
+     $ src/gz all http://www.mysite.com/somedir/deploy/ipk/all
+     $ src/gz armv7a http://www.mysite.com/somedir/deploy/ipk/armv7a
+     $ src/gz beagleboard http://www.mysite.com/somedir/deploy/ipk/beagleboard
+            </literallayout>
+        </para>
+    </section>
+
+    <section id="usingpoky-changes-prbump">
+        <title>Incrementing a Package Revision Number</title>
+
+        <para>
+            If a committed change results in changing the package output,
+            then the value of the 
+            <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PR'>PR</ulink></filename> 
+            variable needs to be increased 
+            (or "bumped") as part of that commit. 
+            This means that for new recipes you must be sure to add the <filename>PR</filename>
+            variable and set its initial value equal to "r0".  
+            Failing to define <filename>PR</filename> makes it easy to miss when you bump a package.
+            Note that you can only use integer values following the "r" in the 
+            <filename>PR</filename> variable.
+        </para>
+
+        <para>
+            If you are sharing a common <filename>.inc</filename> file with multiple recipes, 
+            you can also use the 
+            <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-INC_PR'>INC_PR</ulink></filename> 
+            variable to ensure that 
+            the recipes sharing the <filename>.inc</filename> file are rebuilt when the 
+            <filename>.inc</filename> file itself is changed. 
+            The <filename>.inc</filename> file must set <filename>INC_PR</filename>
+            (initially to "r0"), and all recipes referring to it should set <filename>PR</filename>
+            to "$(INC_PR).0" initially, incrementing the last number when the recipe is changed.
+            If the <filename>.inc</filename> file is changed then its 
+            <filename>INC_PR</filename> should be incremented.
+        </para>
+
+        <para> 
+            When upgrading the version of a package, assuming the 
+            <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PV'>PV</ulink></filename> 
+            changes, the <filename>PR</filename> variable should be reset to "r0"
+            (or "$(INC_PR).0" if you are using <filename>INC_PR</filename>).
+        </para>
+
+        <para>
+            Usually, version increases occur only to packages.
+            However, if for some reason <filename>PV</filename> changes but does not 
+            increase, you can increase the 
+            <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-PE'>PE</ulink></filename> 
+            variable (Package Epoch).
+            The <filename>PE</filename> variable defaults to "0".
+        </para>
+
+        <para>
+            Version numbering strives to follow the 
+            <ulink url='http://www.debian.org/doc/debian-policy/ch-controlfields.html'>
+            Debian Version Field Policy Guidelines</ulink>.
+            These guidelines define how versions are compared and what "increasing" a version means.
+        </para>
+
+        <para>
+            There are two reasons for following the previously mentioned guidelines.
+            First, to ensure that when a developer updates and rebuilds, they get all the changes to
+            the repository and do not have to remember to rebuild any sections.
+            Second, to ensure that target users are able to upgrade their
+            devices using package manager commands such as <filename>opkg upgrade</filename> 
+            (or similar commands for dpkg/apt or rpm-based systems). 
+        </para>
+
+        <para>
+            The goal is to ensure the Yocto Project has packages that can be upgraded in all cases.
+        </para>
+    </section>
+
+    <section id="usingpoky-configuring-DISTRO_PN_ALIAS">
+        <title>Handling a Package Name Alias</title>
+        <para>
+            Sometimes a package name you are using might exist under an alias or as a similarly named
+            package in a different distribution.
+            The Yocto Project implements a <filename>distro_check</filename>
+            task that automatically connects to major distributions
+            and checks for these situations. 
+            If the package exists under a different name in a different distribution, you get a 
+            <filename>distro_check</filename> mismatch.  
+            You can resolve this problem by defining a per-distro recipe name alias using the 
+            <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-DISTRO_PN_ALIAS'>DISTRO_PN_ALIAS</ulink></filename> 
+            variable.
+        </para>
+
+        <para>
+            Following is an example that shows how you specify the <filename>DISTRO_PN_ALIAS</filename>
+            variable:
+            <literallayout class='monospaced'>
+     DISTRO_PN_ALIAS_pn-PACKAGENAME = "distro1=package_name_alias1 \
+                                       distro2=package_name_alias2 \
+                                       distro3=package_name_alias3 \
+                                       ..."
+            </literallayout>
+        </para>
+        
+        <para>
+            If you have more than one distribution alias, separate them with a space.
+            Note that the Yocto Project currently automatically checks the 
+            Fedora, OpenSuSE, Debian, Ubuntu, 
+            and Mandriva distributions for source package recipes without having to specify them 
+            using the <filename>DISTRO_PN_ALIAS</filename> variable.
+            For example, the following command generates a report that lists the Linux distributions
+            that include the sources for each of the Yocto Project recipes.
+            <literallayout class='monospaced'>
+     $ bitbake world -f -c distro_check
+            </literallayout>
+            The results are stored in the <filename>build/tmp/log/distro_check-${DATETIME}.results</filename> 
+            file found in the Yocto Project files area.
+        </para>
+    </section>
+
+    <section id="building-software-from-an-external-source">
+        <title>Building Software from an External Source</title>
+
+        <para>
+            By default, the Yocto Project build system does its work from within the 
+            <link linkend='yocto-project-build-directory'>Yocto Project Build Directory</link>.  
+            The build process involves fetching the source files, unpacking them, and then patching them
+            if necessary before the build takes place.
+        </para>
+
+        <para>
+            Situations exist where you might want to build software from source files that are external to 
+            and thus outside of the <link linkend='yocto-project-files'>Yocto Project Files</link>.
+            For example, suppose you have a project that includes a new BSP with a heavily customized 
+            kernel, a very minimal image, and some new user-space recipes.
+            And, you want to minimize the exposure to the Yocto Project build system to the 
+            development team so that they can focus on their project and maintain everyone's workflow
+            as much as possible.
+            In this case, you want a kernel source directory on the development machine where the 
+            development occurs.
+            You want the recipe's 
+            <ulink url='&YOCTO_DOCS_REF_URL;#var-SRC_URI'><filename>SRC_URI</filename></ulink>
+            variable to point to the external directory and use it as is, not copy it.  
+        </para>
+
+        <para>
+            To build from software that comes from an external source, all you need to do is
+            change your recipe so that it inherits the 
+            <ulink url='&YOCTO_DOCS_REF_URL;#ref-classes-externalsrc'><filename>externalsrc.bbclass</filename></ulink> 
+            class and then sets the 
+            <ulink url='&YOCTO_DOCS_REF_URL;#var-S'><filename>S</filename></ulink>
+            variable to point to your external source code.
+            Here are the statements to put in your recipe:
+            <literallayout class='monospaced'>
+     inherit externalsrc
+     S = "/some/path/to/your/package/source"
+            </literallayout>
+        </para>
+
+        <para>
+            It is important to know that the <filename>externalsrc.bbclass</filename> assumes that the 
+            source directory <filename>S</filename> and the build directory 
+            <ulink url='&YOCTO_DOCS_REF_URL;#var-B'><filename>B</filename></ulink>
+            are different even though by default these directories are the same.
+            This assumption is important because it supports building different variants of the recipe
+            by using the 
+            <ulink url='&YOCTO_DOCS_REF_URL;#var-BBCLASSEXTEND'><filename>BBCLASSEXTEND</filename></ulink>
+            variable.
+            You could allow the build directory to be the same as the source directory but you would 
+            not be able to build more than one variant of the recipe.
+            Consequently, if you are building multiple variants of the recipe, you need to establish a 
+            build directory that is different than the source directory.
+        </para>
+    </section>
+
+    <section id='excluding-recipes-from-the-build'>
+        <title>Excluding Recipes From the Build</title>
+
+        <para>
+            You might find that there are groups of recipes you want to filter 
+            out of the build process.
+            For example, recipes you know you will never use or want should not 
+            be part of the build.
+            Removing these recipes from parsing speeds up parts of the build.
+        </para>
+
+        <para>
+            It is possible to filter or mask out <filename>.bb</filename> and 
+            <filename>.bbappend</filename> files. 
+            You can do this by providing an expression with the 
+            <filename><ulink url='&YOCTO_DOCS_REF_URL;#var-BBMASK'>BBMASK</ulink></filename> 
+            variable. 
+            Here is an example:
+            <literallayout class='monospaced'>
+     BBMASK = ".*/meta-mymachine/recipes-maybe/"
+            </literallayout>
+            Here, all <filename>.bb</filename> and <filename>.bbappend</filename> files
+            in the directory that match the expression are ignored during the build
+            process.
+        </para>
+    </section>
+</chapter>
+
+<!-- 
+vim: expandtab tw=80 ts=4 
+-->

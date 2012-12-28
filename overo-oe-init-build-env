@@ -1,0 +1,2 @@
+#!/bin/sh
+TEMPLATECONF=meta-gumstix/conf source ./poky/oe-init-build-env

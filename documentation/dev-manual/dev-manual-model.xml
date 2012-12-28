@@ -1,0 +1,743 @@
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+[<!ENTITY % poky SYSTEM "../poky.ent"> %poky; ] >
+
+<chapter id='dev-manual-model'>
+
+<title>Common Development Models</title>
+
+<para>
+    Many development models exist for which you can use the Yocto Project. 
+    However, for the purposes of this manual we are going to focus on two common models:  
+    System Development and User Application Development.
+    System Development covers Board Support Package (BSP) development and kernel modification
+    or configuration.  
+    User Application Development covers development of applications that you intend to run on some 
+    target hardware.  
+</para>
+
+<para>
+    This chapter presents overviews of both system and application models.
+    If you want to examine specific examples of the system development models, 
+    see the "<link linkend='dev-manual-bsp-appendix'>BSP Development Example</link>" 
+    appendix and the 
+    "<link linkend='dev-manual-kernel-appendix'>Kernel Modification Example</link>" appendix.
+    For a user-space application development example that uses the 
+    <trademark class='trade'>Eclipse</trademark> IDE,
+    see the 
+    <ulink url='&YOCTO_DOCS_ADT_URL;'>
+    The Yocto Project Application Development Toolkit (ADT) User's Guide</ulink>.
+</para>
+
+<para>
+    Aside from these two models, this chapter will also briefly introduce and discuss
+    development using 
+    <ulink url='&YOCTO_HOME_URL;/projects/hob'>Hob</ulink>, which is a graphical interface 
+    to the Yocto Project build system.
+</para>
+
+<section id='system-development-model'>
+    <title>System Development Workflow</title>
+
+    <para>
+        System development involves modification or creation of an image that you want to run on 
+        a specific hardware target.  
+        Usually, when you want to create an image that runs on embedded hardware, the image does 
+        not require the same number of features that a full-fledged Linux distribution provides.
+        Thus, you can create a much smaller image that is designed to use only the hardware
+        features for your particular hardware.
+    </para>
+
+    <para>
+        To help you understand how system development works in the Yocto Project, this section 
+        covers two types of image development:  BSP creation and kernel modification or 
+        configuration.
+    </para>
+
+    <section id='developing-a-board-support-package-bsp'>
+        <title>Developing a Board Support Package (BSP)</title>
+
+        <para>
+            A BSP is a package of recipes that, when applied, during a build results in 
+            an image that you can run on a particular board.  
+            Thus, the package, when compiled into the new image, supports the operation of the board.  
+        </para>
+
+        <note>
+            For a brief list of terms used when describing the development process in the Yocto Project, 
+            see the "<link linkend='yocto-project-terms'>Yocto Project Terms</link>" section.
+        </note>
+
+        <para>
+            The remainder of this section presents the basic steps used to create a BSP 
+            based on an existing BSP that ships with the Yocto Project.
+            You can reference the "<link linkend='dev-manual-bsp-appendix'>BSP Development Example</link>"
+            appendix for a detailed example that uses the Crown Bay BSP as a base BSP from which to start.
+        </para>
+
+        <para>
+            The following illustration and list summarize the BSP creation general workflow.
+        </para>
+
+        <para>
+            <imagedata fileref="figures/bsp-dev-flow.png" width="6in" depth="7in" align="center" scalefit="1" />
+        </para>
+
+        <para>
+            <orderedlist>
+                <listitem><para><emphasis>Set up your host development system to support 
+                    development using the Yocto Project</emphasis>:  See the
+                    "<ulink url='&YOCTO_DOCS_QS_URL;#the-linux-distro'>The Linux Distributions</ulink>" 
+                    and the 
+                    "<ulink url='&YOCTO_DOCS_QS_URL;#packages'>The Packages</ulink>" sections both
+                    in the Yocto Project Quick Start for requirements.</para></listitem>
+                <listitem><para><emphasis>Establish a local copy of the Yocto Project files on your 
+                    system</emphasis>:  You need to have the Yocto Project files available on your host system. 
+                    Having the Yocto Project files on your system gives you access to the build
+                    process and to the tools you need.
+                    For information on how to get these files, see the
+                    "<link linkend='getting-setup'>Getting Setup</link>" section.</para></listitem>
+                <listitem><para><emphasis>Establish a local copy of the base BSP files</emphasis>:  Having    
+                    the BSP files on your system gives you access to the build
+                    process and to the tools you need for creating a BSP.
+                    For information on how to get these files, see the
+                    "<link linkend='getting-setup'>Getting Setup</link>" section.</para></listitem>    
+                <listitem><para><emphasis>Choose a Yocto Project-supported BSP as your base BSP</emphasis>:  
+                    The Yocto Project ships with several BSPs that support various hardware.  
+                    It is best to base your new BSP on an existing BSP rather than create all the 
+                    recipes and configuration files from scratch.  
+                    While it is possible to create everything from scratch, basing your new BSP 
+                    on something that is close is much easier.  
+                    Or, at a minimum, leveraging off an existing BSP
+                    gives you some structure with which to start.</para>
+                    <para>At this point you need to understand your target hardware well enough to determine which 
+                    existing BSP it most closely matches.  
+                    Things to consider are your hardware’s on-board features, such as CPU type and graphics support.  
+                    You should look at the README files for supported BSPs to get an idea of which one 
+                    you could use.  
+                    A generic <trademark class='registered'>Intel</trademark> 
+                    <trademark class='trade'>Atom</trademark>-based BSP to consider is the 
+                    Crown Bay that does not support the <trademark class='registered'>Intel</trademark> 
+                    Embedded Media Graphics Driver (EMGD).  
+                    The remainder of this example uses that base BSP.</para>
+                    <para>To see the supported BSPs, go to the 
+                    <ulink url='&YOCTO_HOME_URL;/download'>Download</ulink> page on the Yocto Project
+                    website and click on “BSP Downloads.”</para></listitem>
+                <listitem><para><emphasis>Create your own BSP layer</emphasis>:  Layers are ideal for 
+                    isolating and storing work for a given piece of hardware.  
+                    A layer is really just a location or area in which you place the recipes for your BSP.
+                    In fact, a BSP is, in itself, a special type of layer.   
+                    </para>
+                    <para>
+                    Another example that illustrates a layer is an application.  
+                    Suppose you are creating an application that has library or other dependencies in 
+                    order for it to compile and run.  
+                    The layer, in this case, would be where all the recipes that define those dependencies 
+                    are kept.  
+                    The key point for a layer is that it is an isolated area that contains 
+                    all the relevant information for the project that the Yocto Project build 
+                    system knows about.
+                    For more information on layers, see the 
+                    "<link linkend='understanding-and-creating-layers'>Understanding and Creating Layers</link>"
+                    section.
+                    For more information on BSP layers, see the
+                    "<ulink url='&YOCTO_DOCS_BSP_URL;#bsp-layers'>BSP Layers</ulink>" section in the 
+                    Yocto Project Board Support Package (BSP) Developer's Guide.</para>
+                    <note>The Yocto Project supports four BSPs that are part of the 
+                    Yocto Project release: <filename>atom-pc</filename>, <filename>beagleboard</filename>,
+                    <filename>mpc8315e</filename>, and <filename>routerstationpro</filename>.  
+                    The recipes and configurations for these four BSPs are located and dispersed 
+                    within the <link linkend='yocto-project-files'>Yocto Project Files</link>.
+                    On the other hand, BSP layers for Crown Bay, Emenlow, Jasper Forest, 
+                    N450, Cedar Trail, Fish River, Fish River Island II, Romley, sys940x, tlk, 
+                    and Sugar Bay exist in their own separate layers within the larger 
+                    <filename>meta-intel</filename> layer.</note>
+                    <para>When you set up a layer for a new BSP, you should follow a standard layout.  
+                    This layout is described in the section
+                    "<ulink url='&YOCTO_DOCS_BSP_URL;#bsp-filelayout'>Example Filesystem Layout</ulink>"
+                    section of the Board Support Package (BSP) Development Guide.  
+                    In the standard layout, you will notice a suggested structure for recipes and  
+                    configuration information.  
+                    You can see the standard layout for the Crown Bay BSP in this example by examining the 
+                    directory structure of the <filename>meta-crownbay</filename> layer inside the 
+                    local Yocto Project files.</para></listitem>
+                <listitem><para><emphasis>Make configuration changes to your new BSP 
+                    layer</emphasis>:  The standard BSP layer structure organizes the files you need 
+                    to edit in <filename>conf</filename> and several <filename>recipes-*</filename>
+                    directories within the BSP layer.
+                    Configuration changes identify where your new layer is on the local system
+                    and identify which kernel you are going to use.
+                    </para></listitem>
+                <listitem><para><emphasis>Make recipe changes to your new BSP layer</emphasis>:  Recipe 
+                    changes include altering recipes (<filename>.bb</filename> files), removing 
+                    recipes you don't use, and adding new recipes that you need to support your hardware.
+                    </para></listitem>
+                <listitem><para><emphasis>Prepare for the build</emphasis>:  Once you have made all the 
+                    changes to your BSP layer, there remains a few things 
+                    you need to do for the Yocto Project build system in order for it to create your image.  
+                    You need to get the build environment ready by sourcing an environment setup script 
+                    and you need to be sure two key configuration files are configured appropriately.</para>
+                    <para>The entire process for building an image is overviewed in the section
+                    "<ulink url='&YOCTO_DOCS_QS_URL;#building-image'>Building an Image</ulink>" section 
+                    of the Yocto Project Quick Start.    
+                    You might want to reference this information.</para></listitem>
+                <listitem><para><emphasis>Build the image</emphasis>:  The Yocto Project uses the BitBake 
+                    tool to build images based on the type of image you want to create.  
+                    You can find more information on BitBake 
+                    <ulink url='http://bitbake.berlios.de/manual/'>here</ulink>.</para>
+                    <para>The build process supports several types of images to satisfy different needs.  
+                    See the 
+                    "<ulink url='&YOCTO_DOCS_REF_URL;#ref-images'>Reference: Images</ulink>" appendix 
+                    in The Yocto Project Reference Manual for information on 
+                    supported images.</para></listitem>
+            </orderedlist>
+        </para>
+
+        <para>
+            You can view a video presentation on "Building Custom Embedded Images with Yocto"
+            at <ulink url='http://free-electrons.com/blog/elc-2011-videos'>Free Electrons</ulink>.  
+            You can also find supplemental information in  
+            <ulink url='&YOCTO_DOCS_BSP_URL;'>
+            The Board Support Package (BSP) Development Guide</ulink>.
+            Finally, there is wiki page write up of the example also located 
+            <ulink url='&YOCTO_WIKI_URL;/wiki/Transcript:_creating_one_generic_Atom_BSP_from_another'>
+            here</ulink> that you might find helpful.
+       </para>
+    </section>
+
+    <section id='modifying-the-kernel'>
+        <title><anchor id='kernel-spot' />Modifying the Kernel</title>
+
+        <para>
+            Kernel modification involves changing the Linux Yocto kernel, which could involve changing
+            configuration options as well as adding new kernel recipes.  
+            Configuration changes can be added in the form of configuration fragments, while recipe
+            modification comes through the kernel's <filename>recipes-kernel</filename> area
+            in a kernel layer you create.
+        </para>
+
+        <para>
+            The remainder of this section presents a high-level overview of the Linux Yocto 
+            kernel architecture and the steps to modify the Linux Yocto kernel.
+            For a complete discussion of the kernel, see  
+            <ulink url='&YOCTO_DOCS_KERNEL_URL;'>
+            The Yocto Project Kernel Architecture and Use Manual</ulink>.
+            You can reference the appendix 
+            "<link linkend='dev-manual-kernel-appendix'>Kernel Modification Example</link>"
+            for a detailed example that changes the configuration of a kernel.
+        </para>
+
+        <section id='kernel-overview'>
+            <title>Kernel Overview</title>
+
+            <para>
+                Traditionally, when one thinks of a patched kernel, they think of a base kernel
+                source tree and a fixed structure that contains kernel patches.
+                The Yocto Project, however, employs mechanisms, that in a sense, result in a kernel source
+                generator.
+                By the end of this section, this analogy will become clearer.
+            </para>
+
+            <para>
+                You can find a web interface to the Linux Yocto kernel source repositories at
+                <ulink url='&YOCTO_GIT_URL;'></ulink>.
+                If you look at the interface, you will see to the left a grouping of 
+                Git repositories titled "Yocto Linux Kernel."  
+                Within this group, you will find several kernels supported by 
+                the Yocto Project:
+                <itemizedlist>
+                    <listitem><para><emphasis><filename>linux-yocto-2.6.34</filename></emphasis> - The 
+                    stable Linux Yocto kernel that is based on the Linux 2.6.34 release.</para></listitem>
+                    <listitem><para><emphasis><filename>linux-yocto-2.6.37</filename></emphasis> - The
+                    stable Linux Yocto kernel that is based on the Linux 2.6.37 release.</para></listitem>
+                    <listitem><para><emphasis><filename>linux-yocto-3.0</filename></emphasis> - The stable
+                    Linux Yocto kernel that is based on the Linux 3.0 release.</para></listitem>
+                    <listitem><para><emphasis><filename>linux-yocto-3.0-1.1.x</filename></emphasis> - The 
+                    stable Linux Yocto kernel to use with the Yocto Project Release 1.1.x. This kernel 
+                    is based on the Linux 3.0 release</para></listitem>
+                    <listitem><para><emphasis><filename>linux-yocto-3.2</filename></emphasis> - The 
+                    stable Linux Yocto kernel to use with the Yocto Project Release 1.2. This kernel 
+                    is based on the Linux 3.2 release</para></listitem>
+                    <listitem><para><emphasis><filename>linux-yocto-dev</filename></emphasis> - A development
+                    kernel based on the latest upstream release candidate available.</para></listitem>
+                </itemizedlist>
+            </para>
+
+            <para>
+                The kernels are maintained using the Git revision control system
+                that structures them using the familiar "tree", "branch", and "leaf" scheme.
+                Branches represent diversions from general code to more specific code, while leaves
+                represent the end-points for a complete and unique kernel whose source files 
+                when gathered from the root of the tree to the leaf accumulate to create the files
+                necessary for a specific piece of hardware and its features.
+                The following figure displays this concept:
+            <para>
+                <imagedata fileref="figures/kernel-overview-1.png" 
+                    width="6in" depth="6in" align="center" scale="100" />
+            </para> 
+
+            <para>
+                Within the figure, the "Kernel.org Branch Point" represents the point in the tree
+                where a supported base kernel is modified from the Linux kernel.
+                For example, this could be the branch point for the <filename>linux-yocto-3.0</filename>
+                kernel.
+                Thus, everything further to the right in the structure is based on the 
+                <filename>linux-yocto-3.0</filename> kernel.
+                Branch points to right in the figure represent where the 
+                <filename>linux-yocto-3.0</filename> kernel is modified for specific hardware 
+                or types of kernels, such as real-time kernels.
+                Each leaf thus represents the end-point for a kernel designed to run on a specific
+                targeted device.
+            </para>
+
+            <para>
+                The overall result is a Git-maintained repository from which all the supported
+                Yocto Project kernel types can be derived for all the supported Yocto Project devices.
+                A big advantage to this scheme is the sharing of common features by keeping them in 
+                "larger" branches within the tree.  
+                This practice eliminates redundant storage of similar features shared among kernels.
+            </para>
+
+            <note>
+                Keep in mind the figure does not take into account all the supported Linux Yocto
+                kernel types, but rather shows a single generic kernel just for conceptual purposes.
+                Also keep in mind that this structure represents the Yocto Project source repositories 
+                that are either pulled from during the build or established on the host development system
+                prior to the build by either cloning a particular kernel's Git repository or by 
+                downloading and unpacking a tarball.
+            </note>
+
+            <para>
+                Storage of all the available kernel source code is one thing, while representing the 
+                code on your host development system is another.  
+                Conceptually, you can think of the Yocto Project kernel source repositories as all the 
+                source files necessary for all the supported kernels. 
+                As a developer, you are just interested in the source files for the kernel on 
+                on which you are working.
+                And, furthermore, you need them available on your host system.
+            </para>
+
+            <para>
+                You make kernel source code available on your host development system by using 
+                Git to create a bare clone of the Linux Yocto kernel Git repository 
+                in which you are interested.
+                Then, you use Git again to clone a copy of that bare clone.  
+                This copy represents the directory structure on your host system that is particular
+                to the kernel you want.  
+                These are the files you actually modify to change the kernel.
+                See the <link linkend='local-kernel-files'>Linux Yocto Kernel</link> item earlier
+                in this manual for an example of how to set up the kernel source directory
+                structure on your host system.
+            </para>
+
+            <para>
+                This next figure illustrates how the kernel source files might be arranged on 
+                your host system.
+            </para>
+
+            <para>
+                <imagedata fileref="figures/kernel-overview-3-denzil.png" 
+                    width="6in" depth="4in" align="center" scale="100" />
+            </para> 
+
+            <para>
+                In the previous figure, the file structure on the left represents the bare clone 
+                set up to track the Yocto Project kernel Git repository. 
+                The structure on the right represents the copy of the bare clone. 
+                When you make modifcations to the kernel source code, this is the area in which 
+                you work.
+                Once you make corrections, you must use Git to push the committed changes to the 
+                bare clone.
+                The example in <xref linkend='modifying-the-kernel-source-code'>
+                Modifying the Kernel Source Code</xref> provides a detailed example.
+            </para>
+
+            <para>
+                What happens during the build?  
+                When you build the kernel on your development system all files needed for the build
+                are taken from the Yocto Project source repositories pointed to by the 
+                <filename>SRC_URI</filename> variable and gathered in a temporary work area
+                where they are subsequently used to create the unique kernel.
+                Thus, in a sense, the process constructs a local source tree specific to your 
+                kernel to generate the new kernel image - a source generator if you will.
+            </para>
+                The following figure shows the temporary file structure
+                created on your host system when the build occurs. 
+                This build directory contains all the source files used during the build.
+            </para>
+
+            <para>
+                <imagedata fileref="figures/kernel-overview-2.png" 
+                    width="6in" depth="5in" align="center" scale="100" />
+            </para> 
+
+            <para>
+                Again, for a complete discussion of the Yocto Project kernel's architcture and its 
+                branching strategy,
+                see <ulink url='&YOCTO_DOCS_KERNEL_URL;'>
+                The Yocto Project Kernel Architecture and Use Manual</ulink>.
+                You can also reference the
+                "<link linkend='modifying-the-kernel-source-code'>Modifying the Kernel Source Code</link>"
+                section for a detailed example that modifies the kernel.
+            </para>
+        </section> 
+
+        <section id='kernel-modification-workflow'>
+            <title>Kernel Modification Workflow</title>
+
+            <para>
+                This illustration and the following list summarizes the kernel modification general workflow.
+            </para>
+
+            <para>
+                <imagedata fileref="figures/kernel-dev-flow.png" 
+                    width="6in" depth="7.5in" align="center" scalefit="1" />
+            </para> 
+
+            <para>
+                <orderedlist>
+                    <listitem><para><emphasis>Set up your host development system to support 
+                        development using the Yocto Project</emphasis>:  See  
+                        "<ulink url='&YOCTO_DOCS_QS_URL;#the-linux-distro'>The Linux Distributions</ulink>" and  
+                        "<ulink url='&YOCTO_DOCS_QS_URL;#packages'>The Packages</ulink>" sections both
+                        in the Yocto Project Quick Start for requirements.</para></listitem>
+                    <listitem><para><emphasis>Establish a local copy of the Yocto Project files on your 
+                        system</emphasis>:  Having the Yocto Project files on your system gives you access to 
+                        the build process and tools you need.
+                        For information on how to get these files, see the bulleted item
+                        "<link linkend='local-yp-release'>Yocto Project Release</link>" earlier in this manual.
+                        </para></listitem>
+                    <listitem><para><emphasis>Set up the <filename>poky-extras</filename> Git 
+                        repository</emphasis>:  This repository is the area for your configuration 
+                        fragments, new kernel recipes, and the kernel <filename>.bbappend</filename>
+                        file used during the build. 
+                        It is good practice to set this repository up inside the local Yocto
+                        Project files Git repository.
+                        For information on how to get these files, see the bulleted item
+                        "<link linkend='poky-extras-repo'>The <filename>poky-extras</filename> Git Repository</link>"
+                        earlier in this manual.
+                        <note>While it is certainly possible to modify the kernel without involving
+                            a local Git repository, the suggested workflow for kernel modification
+                            using the Yocto Project does use a Git repository.</note></para></listitem>
+                    <listitem><para><emphasis>Establish a local copy of the Linux Yocto kernel files on your 
+                        system</emphasis>:  In order to make modifications to the kernel you need two things:
+                        a bare clone of the Linux Yocto kernel you are modifying and  
+                        a copy of that bare clone. 
+                        The bare clone is required by the build process and is the area to which you 
+                        push your kernel source changes (pulling does not work with bare clones). 
+                        The copy of the bare clone is a local Git repository that contains all the kernel's 
+                        source files. 
+                        You make your changes to the files in this copy of the bare clone.
+                        For information on how to set these two items up, see the bulleted item
+                        "<link linkend='local-kernel-files'>Linux Yocto Kernel</link>" 
+                        earlier in this manual.</para></listitem>
+                    <listitem><para><emphasis>Make changes to the kernel source code if 
+                        applicable</emphasis>:  Modifying the kernel does not always mean directly
+                        changing source files. 
+                        However, if you have to do this, you make the changes in the local 
+                        Git repository you set up to hold the source files (i.e. the copy of the 
+                        bare clone).
+                        Once the changes are made, you need to use Git commands to commit the changes
+                        and then push them to the bare clone.</para></listitem>                      
+                    <listitem><para><emphasis>Make kernel configuration changes
+                        if applicable</emphasis>:  
+                        If your situation calls for changing the kernel's configuration, you can 
+                        use <filename>menuconfig</filename>
+                        to enable and disable kernel configurations.  
+                        Using <filename>menuconfig</filename> allows you to interactively develop and test the 
+                        configuration changes you are making to the kernel.
+                        When saved, changes using <filename>menuconfig</filename> update the kernel's
+                        <filename>.config</filename>.
+                        Try to resist the temptation of directly editing the <filename>.config</filename> 
+                        file found in the 
+                        <link linkend='yocto-project-build-directory'>Yocto Project Build Directory</link> at 
+                        <filename>tmp/sysroots/&lt;machine-name&gt;/kernel</filename>.
+                        Doing so, can produce unexpected results when the Yocto Project build system 
+                        regenerates the configuration file.</para>
+                        <para>Once you are satisfied with the configuration changes made using 
+                        <filename>menuconfig</filename>, you can directly examine the 
+                        <filename>.config</filename> file against a saved original and gather those
+                        changes into a config fragment to be referenced from within the kernel's   
+                        <filename>.bbappend</filename> file.</para></listitem>                      
+                    <listitem><para><emphasis>Add or extend kernel recipes if applicable</emphasis>:  
+                        The standard 
+                        layer structure organizes recipe files inside the 
+                        <filename>meta-kernel-dev</filename> layer that is within the 
+                        <filename>poky-extras</filename> Git repository.
+                        If you need to add new kernel recipes, you add them within this layer. 
+                        Also within this area, you will find the <filename>.bbappend</filename> 
+                        file that appends information to the kernel's recipe file used during the 
+                        build.
+                        </para></listitem>
+                    <listitem><para><emphasis>Prepare for the build</emphasis>:  Once you have made all the 
+                        changes to your kernel (configurations, source code changes, recipe additions, 
+                        or recipe changes), there remains a few things 
+                        you need to do in order for the Yocto Project build system (BitBake) to create your image.  
+                        If you have not done so, you need to get the build environment ready by sourcing 
+                        the environment setup script described earlier.
+                        You also need to be sure two key configuration files 
+                        (<filename>local.conf</filename> and <filename>bblayers.conf</filename>)
+                        are configured appropriately.</para>
+                        <para>The entire process for building an image is overviewed in the 
+                        "<ulink url='&YOCTO_DOCS_QS_URL;#building-image'>Building an Image</ulink>" 
+                        section of the Yocto Project Quick Start.    
+                        You might want to reference this information.
+                        Also, you should look at the detailed examples found in the appendices at 
+                        at the end of this manual.</para></listitem>
+                    <listitem><para><emphasis>Build the image</emphasis>:  The Yocto Project 
+                        build system Poky uses the BitBake 
+                        tool to build images based on the type of image you want to create.  
+                        You can find more information on BitBake 
+                        <ulink url='http://bitbake.berlios.de/manual/'>here</ulink>.</para>
+                        <para>The build process supports several types of images to satisfy different needs.  
+                        See the appendix
+                        "<ulink url='&YOCTO_DOCS_REF_URL;#ref-images'>Reference: Images</ulink>" in 
+                        The Yocto Project Reference Manual for information on supported images.</para></listitem>
+                    <listitem><para><emphasis>Make your configuration changes available
+                        in the kernel layer</emphasis>:  Up to this point, all the configuration changes to the 
+                        kernel have been done and tested iteratively.  
+                        Once they are tested and ready to go, you can move them into the kernel layer, 
+                        which allows you to distribute the layer.</para></listitem>
+                    <listitem><para><emphasis>If applicable, share your in-tree changes</emphasis>:  
+                        If the changes you made
+                        are suited for all Linux Yocto users, you might want to send them on for inclusion
+                        into the Linux Yocto Git repository. 
+                        If the changes are accepted, the Yocto Project Maintainer pulls them into 
+                        the master branch of the kernel tree. 
+                        Doing so makes them available to everyone using the kernel.</para></listitem> 
+                </orderedlist>
+            </para>
+        </section>
+    </section>
+</section>
+
+<section id='place-holder-section-two'>
+    <title>Application Development Workflow</title>
+
+    <para>
+        Application development involves creation of an application that you want to be able
+        to run on your target hardware, which is running a Linux Yocto image.
+        The Yocto Project provides an Application Development Toolkit (ADT) that 
+        facilitates quick development and integration of your application into its run-time environment. 
+        Using the ADT you can employ cross-development toolchains designed for your target hardware
+        to compile and link your application. 
+        You can then deploy your application to the actual hardware or to the QEMU emulator for testing.
+        If you are familiar with the popular Eclipse IDE, you can use an Eclipse Yocto Plug-in to 
+        allow you to develop, deploy, and test your application all from within Eclipse.
+    </para>
+
+    <para>
+        While we strongly suggest using the Yocto Project ADT to develop your application, you might
+        not want to.  
+        If this is the case, you can still use pieces of the Yocto Project for your development process. 
+        However, because the process can vary greatly, this manual does not provide detail on the process.
+    </para>
+
+    <section id='workflow-using-the-adt-and-eclipse'>
+        <title>Workflow Using the ADT and <trademark class='trade'>Eclipse</trademark></title>
+
+        <para>
+            To help you understand how application development works in the Yocto Project ADT
+            environment, this section 
+            provides an overview of the general development process.
+            If you want to see a detailed example of the process as it is used from within the Eclipse 
+            IDE, see 
+            <ulink url='&YOCTO_DOCS_ADT_URL;'>
+            The Application Development Toolkit (ADT) User's Manual</ulink>.
+        </para>
+
+        <para>
+            This illustration and the following list summarizes the application development general workflow.
+        </para>
+
+        <para>
+            <imagedata fileref="figures/app-dev-flow.png" 
+                width="7in" depth="8in" align="center" scale="100" />
+        </para> 
+
+        <para>
+            <orderedlist>
+                <listitem><para><emphasis>Prepare the Host System for the Yocto Project</emphasis>:  
+                    See  
+                    "<ulink url='&YOCTO_DOCS_QS_URL;#the-linux-distro'>The Linux Distributions</ulink>" and  
+                    "<ulink url='&YOCTO_DOCS_QS_URL;#packages'>The Packages</ulink>" sections both
+                    in the Yocto Project Quick Start for requirements.</para></listitem>
+
+<!--
+WRITER NOTE:  The areas to get the kernel and root filesystem are located in the Index of 
+              downloads.  There are many forms of each.  The files that have "rootfs" are just the 
+              target root filesystems.  The file that is very small and starts with bzImage is just
+              the kernel image isolated so that it can be written to a special on-board area of 
+              flash memory.  Some systems require this.  In the machines directory there are  
+              files that combine the kernel image and the root filesystem.  These files are the ISO 
+              and HDDIMG files.  ISO images are designed to be deployed on a DVD or CD.  The ISO
+              images are designed to be deployed on a USB stick.  There might be some relics in 
+              the machine directory.  For example, there is the "emenlow-bernard-5.0.0.tar.bz2" 
+              file.  Nobody seems to know what this is.  If a developer needs the image and the 
+              root filesystem I think that they want the small kernel image and a matching root 
+              filesystem.  Although, Paul Eggleton says that the HDDIMG types could be used to 
+              develop on.  I am not sure that we can use one of those in the ADT though as they 
+              want you to point to the kernel image and the target root filesystem.  Maybe you 
+              could just point to the same spot.  I am not sure.
+-->
+
+                <listitem><para><emphasis>Secure the Linux Yocto Kernel Target Image</emphasis>:  
+                    You must have a target kernel image that has been built using the Yocto Project.</para>
+                    <para>Depending on whether the Yocto Project has a pre-built image that matches your target
+                    architecture and where you are going to run the image while you develop your application
+                    (QEMU or real hardware), the area from which you get the image differs.
+                        <itemizedlist>
+                            <listitem><para>Download the image from  
+                                <ulink url='&YOCTO_MACHINES_DL_URL;'>  
+                                <filename>machines</filename></ulink> if your target architecture is supported
+                                and you are going to develop and test your application on actual hardware. 
+                                </para></listitem>
+                            <listitem><para>Download the image from the 
+                                <ulink url='&YOCTO_QEMU_DL_URL;'>  
+                                <filename>machines/qemu</filename></ulink> if your target architecture is supported
+                                and you are going to develop and test your application using the QEMU 
+                                emulator.</para></listitem>
+                            <listitem><para>Build your image if you cannot find a pre-built image that matches
+                                your target architecture.
+                                If your target architecture is similar to a supported architecture, you can 
+                                modify the kernel image before you build it.
+                                See the 
+                                "<link linkend='kernel-modification-workflow'>Kernel Modification Workflow</link>"
+                                section earlier in this manual for information on how to create a modified 
+                                Linux Yocto kernel.</para></listitem>
+                        </itemizedlist></para>
+                    <para>For information on pre-built kernel image naming schemes for images 
+                    that can run on the QEMU emulator, see the
+                    "<ulink url='&YOCTO_DOCS_QS_URL;#using-pre-built'>Using Pre-Built Binaries and QEMU</ulink>"
+                    section in the Yocto Project Quick Start.</para></listitem>
+                <listitem><para><emphasis>Install the ADT</emphasis>:  
+                    The ADT provides a target-specific cross-development toolchain, the root filesystem,
+                    the QEMU emulator, and other tools that can help you develop your application.
+                    While it is possible to get these pieces separately, the Yocto Project provides an 
+                    easy method.
+                    You can get these pieces by running an ADT installer script, which is configurable.
+                    For information on how to install the ADT, see the
+                    "<ulink url='&YOCTO_DOCS_ADT_URL;#using-the-adt-installer'>Using the ADT Installer</ulink>"
+                    section 
+                    in the Yocto Project Application Development (ADT) User's Manual.</para></listitem>
+                <listitem><para><emphasis>If Applicable, Secure the Target Root Filesystem</emphasis>:  
+                    If you choose not to install the ADT using the ADT Installer,
+                    you need to find and download the 
+                    appropriate root filesystems.
+                    You can find these tarballs in the same areas used for the kernel images.
+                    Depending on the type of image you are running, the root filesystem you need differs. 
+                    For example, if you are developing an application that runs on an image that 
+                    supports Sato, you need to get root filesystem that supports Sato.
+                    </para></listitem>
+                <listitem><para><emphasis>Create and Build your Application</emphasis>:  
+                    At this point, you need to have source files for your application.
+                    Once you have the files, you can use the Eclipse IDE to import them and build the 
+                    project. 
+                    If you are not using Eclipse, you need to use the cross-development tools you have 
+                    installed to create the image.</para></listitem>                      
+                <listitem><para><emphasis>Deploy the Image with the Application</emphasis>:  
+                    If you are using the Eclipse IDE, you can deploy your image to the hardware or to 
+                    QEMU through the project's preferences.  
+                    If you are not using the Eclipse IDE, then you need to deploy the application using 
+                    other methods to the hardware.
+                    Or, if you are using QEMU, you need to use that tool and load your image in for testing. 
+                    </para></listitem>                      
+                <listitem><para><emphasis>Test and Debug the Application</emphasis>:  
+                    Once your application is deployed, you need to test it.
+                    Within the Eclipse IDE, you can use the debubbing environment along with the 
+                    set of user-space tools installed along with the ADT to debug your application. 
+                    Of course, the same user-space tools are available separately to use if you choose
+                    not to use the Eclipse IDE.</para></listitem>
+           </orderedlist>
+        </para>
+    </section>
+
+    <section id='workflow-without-adt'>
+        <title>Workflow Without ADT</title>
+
+        <para>
+            If you want to develop an application outside of the Yocto Project ADT environment, you 
+            can still employ the cross-development toolchain, the QEMU emulator, and a number of supported
+            target image files.  
+            You just need to follow these general steps:
+            <orderedlist>
+                <listitem><para><emphasis>Install the cross-development toolchain for your target hardware:</emphasis> 
+                    For information on how to install the toolchain, see the
+                    "<ulink url='&YOCTO_DOCS_ADT_URL;#using-an-existing-toolchain-tarball'>Using a Cross-Toolchain Tarball</ulink>" 
+                    section
+                    in the Yocto Project Application Development (ADT) User's Manual.</para></listitem>
+                <listitem><para><emphasis>Download the Target Image:</emphasis>  The Yocto Project supports
+                    several target architectures and has many pre-built kernel images and root filesystem 
+                    images.</para>
+                    <para>If you are going to develop your application on hardware, go to the 
+                    <ulink url='&YOCTO_MACHINES_DL_URL;'>  
+                    <filename>machines</filename></ulink> download area and choose a target machine area
+                    from which to download the kernel image and root filesystem.
+                    This download area could have several files in it that support development using   
+                    actual hardware. 
+                    For example, the area might contain <filename>.hddimg</filename> files that combine the 
+                    kernel image with the filesystem, boot loaders, etc.
+                    Be sure to get the files you need for your particular development process.</para>
+                    <para>If you are going to develop your application and then run and test it using the QEMU
+                    emulator, go to the 
+                    <ulink url='&YOCTO_QEMU_DL_URL;'>  
+                    <filename>machines/qemu</filename></ulink> download area.
+                    From this area, go down into the directory for your target architecture
+                    (e.g. <filename>qemux86_64</filename> for an 
+                    <trademark class='registered'>Intel</trademark>-based 64-bit architecture).
+                    Download kernel, root filesystem, and any other files you need for your process.
+                    <note>In order to use the root filesystem in QEMU, you need to extract it.
+                    See the 
+                    "<ulink url='&YOCTO_DOCS_ADT_URL;#extracting-the-root-filesystem'>Extracting the Root Filesystem</ulink>" section for information on how to extract the 
+                    root filesystem.</note></para></listitem>
+                <listitem><para><emphasis>Develop and Test your Application:</emphasis>  At this point, 
+                    you have the tools to develop your application.  
+                    If you need to separately install and use the QEMU emulator, you can go to 
+                    <ulink url='http://www.qemu.org'>QEMU Home Page</ulink> to download and learn about the 
+                    emulator.</para></listitem>
+            </orderedlist>
+        </para>
+    </section>
+</section>
+
+<section id='image-development-using-hob'>
+    <title>Image Development Using Hob</title>
+
+    <para>
+        The <ulink url='&YOCTO_HOME_URL;/projects/hob'>Hob</ulink> is a graphical user interface for the Yocto 
+        Project build system based on BitBake.
+        You can use the Hob to build custom operating system images within the Yocto Project build environment.
+        Hob simply provides a friendly interface over the build system used during system development.
+        In other words, building images with the Hob lets you take care of common Yocto Project build tasks more easily.
+    </para>
+
+    <para>
+        For a better understanding of Hob, see the project page at
+        <ulink url='&YOCTO_HOME_URL;/projects/hob'></ulink> on the Yocto Project website.
+        The page has a short introductory training video on Hob.
+        The following lists some features of Hob:
+        <itemizedlist>
+            <listitem><para>You can setup and run Hob using these commands:
+            <literallayout class='monospaced'>
+     $ source oe-init-build-env
+     $ hob
+            </literallayout></para></listitem>
+            <listitem><para>You can set the 
+                <ulink url='&YOCTO_DOCS_REF_URL;#var-MACHINE'><filename>MACHINE</filename></ulink>
+                for which you are building the image.</para></listitem>
+            <listitem><para>You can modify various policy settings such as the package format used to build with, 
+                the parrallelism BitBake uses, whether or not to build an external toolchain, and which host 
+                to build against.</para></listitem>
+            <listitem><para>You can manage 
+                <link linkend='understanding-and-creating-layers'>layers</link>.</para></listitem>
+            <listitem><para>You can select a base image and then add extra packages for your custom build.
+                </para></listitem>
+            <listitem><para>You can launch and monitor the build from within Hob.</para></listitem>
+        </itemizedlist>
+    </para>
+</section>
+
+</chapter>
+<!--
+vim: expandtab tw=80 ts=4
+-->

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+help ()
+{
+    base=`basename $0`
+    echo -e "Usage: $base command"
+    echo "Avaliable commands:"
+    echo -e "\texport <file>: export and lock down the AUTOPR values from the PR service into a file for release."
+    echo -e "\timport <file>: import the AUTOPR values from the exported file into the PR service."
+}
+
+clean_cache()
+{
+    s=`bitbake -e | grep ^CACHE= | cut -f2 -d\"`
+    if [ "x${s}" != "x" ]; then
+        rm -rf ${s}
+    fi
+}
+
+do_export ()
+{
+    file=$1
+    [ "x${file}" == "x" ] && help && exit 1
+    rm -f ${file}
+
+    clean_cache
+    bitbake -R conf/prexport.conf -p
+    s=`bitbake -R conf/prexport.conf -e | grep ^PRSERV_DUMPFILE= | cut -f2 -d\"`
+    if [ "x${s}" != "x" ];
+    then
+       [ -e $s ] && mv -f $s $file && echo "Exporting to file $file succeeded!"
+       return 0
+    fi
+    echo "Exporting to file $file failed!"
+    return 1
+}
+
+do_import ()
+{
+    file=$1
+    [ "x${file}" == "x" ] && help && exit 1
+
+    clean_cache
+    bitbake -R conf/primport.conf -R $file -p
+    ret=$?
+    [ $ret -eq 0 ] && echo "Importing from file $file succeeded!" || echo "Importing from file $file failed!"
+    return $ret
+}
+
+[ $# -eq 0 ] && help  && exit 1
+
+case $1 in
+export)
+    do_export $2
+    ;;
+import)
+    do_import $2
+    ;;
+*)
+    help
+    exit 1
+    ;;
+esac
