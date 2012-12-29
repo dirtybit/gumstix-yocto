@@ -1,2 +1,4 @@
 #!/bin/sh
 TEMPLATECONF=meta-gumstix/conf source ./poky/oe-init-build-env
+export PARALLEL_MAKE="-j 8"
+export BB_THREADS_NUMBER="4"
