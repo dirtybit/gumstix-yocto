@@ -9,15 +9,13 @@ ARM_INSTRUCTION_SET = "arm"
 
 DEPENDS = "python-numpy v4l-utils libav gtk+ libtool swig swig-native python jpeg bzip2 zlib libpng tiff glib-2.0"
 
-SRC_URI = "svn://code.opencv.org/svn/opencv/branches/2.4;module=opencv;proto=http \
-           file://0001-Fix-CMakeLists.txt-numpy-detection.patch \
+SRC_URI = " git://code.opencv.org/opencv.git;protocol=git;tag=de153f01549f8c20675507e545fe1983c0211c36;branch=2.4 \
+	file://0001-Fix-CMakeLists.txt-numpy-detection.patch \
           "
-
-SRCREV = "8988"
 
 PV = "2.4.2"
 
-S = "${WORKDIR}/opencv"
+S = "${WORKDIR}/git"
 
 EXTRA_OECMAKE = "-DPYTHON_NUMPY_INCLUDE_DIRS=${STAGING_LIBDIR}/${PYTHON_DIR}/site-packages/numpy/core/include \
                  -DBUILD_PYTHON_SUPPORT=ON \

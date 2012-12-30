@@ -8,10 +8,8 @@ DEPENDS = "opencv"
 LIC_FILES_CHKSUM = "file://include/opencv2/opencv.hpp;endline=41;md5=6d690d8488a6fca7a2c192932466bb14 \
 "
 
-SRC_URI = "svn://code.opencv.org/svn/opencv/branches/2.4;module=opencv;proto=http \
+SRC_URI = "git://code.opencv.org/opencv.git;protocol=git;tag=de153f01549f8c20675507e545fe1983c0211c36;branch=2.4 \
           "
-
-SRCREV = "8988"
 
 PV = "2.4.2"
 
