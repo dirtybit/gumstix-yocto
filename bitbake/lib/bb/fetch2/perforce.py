@@ -111,7 +111,7 @@ class Perforce(FetchMethod):
         base = path
         which = path.find('/...')
         if which != -1:
-            base = path[:which]
+            base = path[:which-1]
 
         base = self._strip_leading_slashes(base)
 
